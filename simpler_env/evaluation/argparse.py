@@ -113,6 +113,21 @@ def get_args():
     parser.add_argument("--tf-memory-limit", type=int, default=3072, help="Tensorflow memory limit")
     parser.add_argument("--octo-init-rng", type=int, default=0, help="Octo init rng seed")
 
+    parser.add_argument('--num_initial_actions', type=int, default=10, 
+                        help='Number of initial actions to sample (A parameter)')
+    parser.add_argument('--horizon_per_action', type=int, default=5, 
+                        help='Number of actions to consider for each state (Horizon parameter)')
+    parser.add_argument('--num_steps_ahead', type=int, default=3, 
+                        help='Number of simulation steps to look ahead (h parameter)')
+    parser.add_argument('--num_candidates', type=int, default=5, 
+                        help='Number of candidate actions to sample')
+    parser.add_argument('--num_best_actions', type=int, default=3, 
+                        help='Number of best actions to select')
+    parser.add_argument('--temperature', type=float, default=1.0, 
+                        help='Temperature for sampling')
+    parser.add_argument('--render_tree', action='store_true', 
+                        help='Whether to render the tree')  
+
     args = parser.parse_args()
 
     # env args: robot pose

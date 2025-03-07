@@ -12,7 +12,7 @@ tasks=(
 )
 
 ckpts=(
-  ~/projects/vla_ptm/pretrained/openvla-7b
+  openvla/openvla-7b
 )
 
 action_ensemble_temp=-0.8

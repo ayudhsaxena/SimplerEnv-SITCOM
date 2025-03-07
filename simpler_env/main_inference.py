@@ -7,6 +7,12 @@ from simpler_env.evaluation.argparse import get_args
 from simpler_env.evaluation.maniskill2_evaluator import maniskill2_evaluator
 
 try:
+    from simpler_env.policies.sitcom.sitcom import SITCOMInference
+except ImportError as e:
+    print("SITCOM is not correctly imported.")
+    print(e)
+
+try:
     from simpler_env.policies.octo.octo_model import OctoInference
 except ImportError as e:
     print("Octo is not correctly imported.")
@@ -85,6 +91,15 @@ if __name__ == "__main__":
             saved_model_path=args.ckpt_path,
             policy_setup=args.policy_setup,
             action_scale=args.action_scale,
+            # Add the new planning parameters here
+            num_initial_actions=args.num_initial_actions if hasattr(args, 'num_initial_actions') else 10,
+            horizon_per_action=args.horizon_per_action if hasattr(args, 'horizon_per_action') else 5,
+            num_steps_ahead=args.num_steps_ahead if hasattr(args, 'num_steps_ahead') else 3,
+            num_candidates=args.num_candidates if hasattr(args, 'num_candidates') else 5,
+            num_best_actions=args.num_best_actions if hasattr(args, 'num_best_actions') else 3,
+            temperature=args.temperature if hasattr(args, 'temperature') else 1.0,
+            render_tree=args.render_tree if hasattr(args, 'render_tree') else False,
+            logging_dir=args.logging_dir,
         )
     else:
         raise NotImplementedError()

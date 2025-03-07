@@ -11,8 +11,8 @@ class TwoSimulatorPlanner:
     
     def __init__(
         self,
-        reward_function,
         saved_model_path: str = "openvla/openvla-7b",
+        reward_function=None,
         num_initial_actions=10,  # A parameter
         horizon_per_action=5,    # Horizon parameter
         num_steps_ahead=3,       # h parameter
@@ -28,10 +28,7 @@ class TwoSimulatorPlanner:
         Initialize the planner.
         
         Args:
-            env: The first simulator (environment)
-            model: The second simulator (dynamics model)
-            openvla_model: The OpenVLA model for sampling actions
-            task_description: The task description
+            saved_model_path: Path to the OpenVLA model
             reward_function: Function to compute reward (state, action) -> reward
             num_initial_actions: Number of initial actions to sample (A)
             horizon_per_action: Number of actions to consider for each state (Horizon)
@@ -41,79 +38,148 @@ class TwoSimulatorPlanner:
             temperature: Temperature for sampling
             render_tree: Whether to render the tree
             logging_dir: Directory for logging
+            policy_setup: Policy setup for the OpenVLA model
+            action_scale: Scaling factor for actions
         """
-        self.model = OpenVLAInference(saved_model_path=saved_model_path, policy_setup=policy_setup, action_scale=action_scale)
-
-        self.reward_function = reward_function
+        # Initialize the OpenVLA model for action sampling
+        self.model = OpenVLAInference(
+            saved_model_path=saved_model_path, 
+            policy_setup=policy_setup, 
+            action_scale=action_scale
+        )
+        
+        # Set up reward function or use default
+        if reward_function is None:
+            self.reward_function = self._default_reward_function
+        else:
+            self.reward_function = reward_function
         
         # Hyperparameters
-        self.num_initial_actions = num_initial_actions
-        self.horizon_per_action = horizon_per_action
-        self.num_steps_ahead = num_steps_ahead
+        self.num_initial_actions = num_initial_actions  # A
+        self.horizon_per_action = horizon_per_action    # Horizon
+        self.num_steps_ahead = num_steps_ahead          # h
         self.num_candidates = num_candidates
         self.num_best_actions = num_best_actions
         self.temperature = temperature
         
-        # Visualization
+        # Visualization settings
         self.render_tree = render_tree
         self.logging_dir = logging_dir
+        
+        # Task description
+        self.task_description = None
         
         # Reset internal state
         self.reset()
     
+    def _default_reward_function(self, state, action=None):
+        """
+        Default reward function based on distances between objects.
+        
+        Args:
+            state: The environment state
+            action: The action (optional)
+            
+        Returns:
+            reward: The computed reward
+        """
+        # This is a simplified example. Real implementations would extract positions from state
+        # For example from robot state, object positions, etc.
+        
+        # Extract positions (implementation depends on environment)
+        try:
+            # Get positions from environment
+            gripper_pos = np.array([0, 0, 0])  # Placeholder, replace with actual implementation
+            object_pos = np.array([0, 0, 0])   # Placeholder, replace with actual implementation
+            plate_pos = np.array([0, 0, 0])    # Placeholder, replace with actual implementation
+            
+            # Check if object is grabbed
+            is_grabbed = False  # Placeholder, replace with actual implementation
+            
+            # Calculate distance reward
+            if is_grabbed:
+                # If object is grabbed, reward is based on distance to target
+                distance = np.linalg.norm(gripper_pos - plate_pos)
+            else:
+                # If object is not grabbed, reward is based on distance to object
+                distance = np.linalg.norm(gripper_pos - object_pos)
+            
+            # Convert distance to reward (closer is better)
+            reward = -distance
+            
+            return reward
+        except:
+            # If we can't compute the reward, return a default value
+            return 0.0
+    
     def reset(self, task_description=None):
-        """Reset the planner."""
+        """
+        Reset the planner.
+        
+        Args:
+            task_description: Optional task description
+        """
         self.simulation_tree = None
         self.best_trajectory = None
         self.best_reward = float('-inf')
-        self.model.reset(task_description=task_description)
         
-    def sample_actions_from_openvla(self, image, num_actions, temperature=None):
+        if task_description is not None:
+            self.task_description = task_description
+            self.model.reset(task_description)
+    
+    def sample_actions_from_model(self, image, task_description, num_samples, temperature=None):
         """
-        Sample actions from OpenVLA model.
+        Sample actions from the model.
         
         Args:
             image: The current image observation
-            num_actions: Number of actions to sample
-            temp: Temperature for sampling (override default if provided)
+            task_description: The task description
+            num_samples: Number of actions to sample
+            temperature: Temperature for sampling (override default if provided)
             
         Returns:
             List of sampled actions
         """
+        actions = []
         temperature = temperature if temperature is not None else self.temperature
-        # This is a placeholder for how you would call your OpenVLA model
-        # The actual implementation will depend on your OpenVLA API
-        return self.model.sample_actions(
-            image, 
-            self.task_description, 
-            num_samples=num_actions,
-            temperature=temperature
-        )
+        
+        # Sample actions from the model
+        for _ in range(num_samples):
+            raw_action, action = self.model.step(
+                image, 
+                task_description, 
+                temperature=temperature
+            )
+            actions.append(action)
+        
+        return actions
     
     def simulate_action(self, state, action):
         """
-        Simulate an action using the second simulator (model).
+        Simulate an action using the second simulator.
         
         Args:
             state: The current state
             action: The action to simulate
             
         Returns:
-            next_state, reward, image
+            next_state, reward, image, done
         """
         # Create a copy of the state to avoid modifying the original
         state_copy = copy.deepcopy(state)
         
-        
         # Simulate the action using the model (second simulator)
-        obs, reward, done, truncated, info = state_copy.step(
-            np.concatenate([
-                action["world_vector"], 
-                action["rot_axangle"], 
-                action["gripper"]
-            ])
-        )
-
+        # For ManiSkill2, we need to concatenate action components
+        action_array = np.concatenate([
+            action["world_vector"], 
+            action["rot_axangle"], 
+            action["gripper"]
+        ])
+        
+        # Step the environment with the action
+        obs, reward, done, truncated, info = state_copy.step(action_array)
+        
+        # Extract the image from the observation
         image = get_image_from_maniskill2_obs_dict(state_copy, obs)
         
         return state_copy, reward, image, done
@@ -144,35 +210,45 @@ class TwoSimulatorPlanner:
             best_actions: List of best actions
         """
         # Compute rewards for all candidate actions
-        rewards = []
-        for action in candidate_actions:
-            next_state, _, _, _ = self.simulate_action(state, action)
-            reward = self.compute_reward(next_state)
-            rewards.append((action, reward))
+        action_rewards = []
         
-        # Sort by reward (descending) and select the best
-        rewards.sort(key=lambda x: x[1], reverse=True)
-        return [action for action, _ in rewards[:num_best]]
+        for action in candidate_actions:
+            # Simulate the action to get the next state
+            next_state, _, _, _ = self.simulate_action(state, action)
+            
+            # Compute the reward for the resulting state
+            reward = self.compute_reward(next_state)
+            
+            # Store the action and its reward
+            action_rewards.append((action, reward))
+        
+        # Sort by reward (descending) and select the best actions
+        action_rewards.sort(key=lambda x: x[1], reverse=True)
+        best_actions = [action for action, _ in action_rewards[:num_best]]
+        
+        return best_actions
     
-    def build_simulation_tree(self, root_state, root_image):
+    def build_simulation_tree(self, root_state, root_image, task_description):
         """
         Build a simulation tree by exploring possible actions.
         
         Args:
             root_state: The initial state
             root_image: The initial image
+            task_description: The task description
             
         Returns:
-            root_node: The root node of the tree
+            best_action: The best action to take
         """
         # Create the root node
         root_node = SimulationNode(root_state, root_image)
         
-        # Sample initial actions
-        initial_actions = self.sample_actions_from_openvla(
+        # Sample initial actions (A = num_initial_actions)
+        initial_actions = self.sample_actions_from_model(
             root_image, 
+            task_description, 
             self.num_initial_actions,
-            temperature=1.0
+            temperature=self.temperature
         )
         
         best_leaf_node = None
@@ -180,7 +256,7 @@ class TwoSimulatorPlanner:
         
         # For each initial action, simulate and build a subtree
         for i, action in enumerate(initial_actions):
-            # Simulate the action
+            # Simulate the action to get the next state
             next_state, reward, next_image, done = self.simulate_action(root_state, action)
             
             # Create a child node
@@ -197,13 +273,22 @@ class TwoSimulatorPlanner:
             
             # Explore this subtree further if not done
             if not done:
-                # Perform look-ahead simulation
-                leaf_node = self._simulate_ahead(child_node)
+                # Perform look-ahead simulation (h = num_steps_ahead)
+                leaf_node = self._simulate_ahead(
+                    child_node, 
+                    task_description, 
+                    current_depth=1
+                )
                 
-                # Update best leaf node if needed
+                # Update best leaf node if better reward
                 if leaf_node.reward > best_reward:
                     best_reward = leaf_node.reward
                     best_leaf_node = leaf_node
+            
+            # If done but reward is better than current best
+            elif child_node.reward > best_reward:
+                best_reward = child_node.reward
+                best_leaf_node = child_node
         
         # Store the tree and best trajectory
         self.simulation_tree = root_node
@@ -218,12 +303,13 @@ class TwoSimulatorPlanner:
         # Fallback to the first action if no simulation was successful
         return initial_actions[0] if initial_actions else None
     
-    def _simulate_ahead(self, node, current_depth=1):
+    def _simulate_ahead(self, node, task_description, current_depth=1):
         """
         Recursively simulate ahead from a node.
         
         Args:
             node: The current node
+            task_description: The task description
             current_depth: Current depth in the tree
             
         Returns:
@@ -233,9 +319,10 @@ class TwoSimulatorPlanner:
         if current_depth >= self.num_steps_ahead or node.reward == float('inf'):
             return node
         
-        # Sample candidate actions from this state
-        candidate_actions = self.sample_actions_from_openvla(
+        # Sample candidate actions from this state (typically more than we'll use)
+        candidate_actions = self.sample_actions_from_model(
             node.image, 
+            task_description, 
             self.num_candidates
         )
         
@@ -254,13 +341,13 @@ class TwoSimulatorPlanner:
             # Simulate the action
             next_state, reward, next_image, done = self.simulate_action(node.state, action)
             
-            # Create a child node
+            # Create a child node with cumulative reward
             child_node = SimulationNode(
                 next_state, 
                 next_image, 
                 parent=node, 
                 action=action, 
-                reward=node.reward + reward,  # Accumulate rewards
+                reward=node.reward + reward,  # Accumulate rewards along the path
                 depth=current_depth + 1
             )
             child_node.original_action_idx = node.original_action_idx  # Propagate original action index
@@ -268,14 +355,19 @@ class TwoSimulatorPlanner:
             
             # Continue simulation if not done
             if not done:
-                leaf_node = self._simulate_ahead(child_node, current_depth + 1)
+                leaf_node = self._simulate_ahead(
+                    child_node, 
+                    task_description, 
+                    current_depth + 1
+                )
                 
                 # Update best leaf if needed
                 if leaf_node.reward > best_reward:
                     best_reward = leaf_node.reward
                     best_leaf = leaf_node
+            
+            # If done but reward is better than current best
             elif child_node.reward > best_reward:
-                # Terminal state with better reward
                 best_reward = child_node.reward
                 best_leaf = child_node
         
@@ -294,6 +386,7 @@ class TwoSimulatorPlanner:
         trajectory = []
         current = node
         
+        # Traverse up the tree from leaf to root
         while current.parent:
             trajectory.append((current.parent.state, current.action))
             current = current.parent
@@ -302,12 +395,13 @@ class TwoSimulatorPlanner:
         trajectory.reverse()
         return trajectory
     
-    def plan(self, current_env, image, task_description=None):
+    def plan(self, env, image, task_description=None):
         """
         Plan the best action to take from the current state.
         
         Args:
-            obs: The current observation
+            env: The current environment state (first simulator)
+            image: The current image observation
             task_description: Optional updated task description
             
         Returns:
@@ -316,22 +410,9 @@ class TwoSimulatorPlanner:
         # Update task description if provided
         if task_description is not None:
             self.task_description = task_description
+            self.model.reset(task_description)
         
         # Build simulation tree and get the best action
-        best_action = self.build_simulation_tree(current_env, image)
+        best_action = self.build_simulation_tree(env, image, self.task_description)
         
         return best_action
-    
-    def visualize_tree(self, save_path=None):
-        """
-        Visualize the simulation tree.
-        
-        Args:
-            save_path: Path to save the visualization
-        """
-        if not self.render_tree:
-            return
-        
-        # Implement visualization as needed
-        # This could use libraries like networkx and matplotlib
-        pass

@@ -23,12 +23,10 @@ class SITCOMInference:
         action_scale: float = 1.0,
     ):
         """
-        Initialize the planning model.
+        Initialize the wrapper for the planning model.
         
         Args:
-            env: The environment (first simulator)
-            model: The dynamics model (second simulator)
-            openvla_model: The OpenVLA model
+            saved_model_path: Path to the OpenVLA model
             reward_function: Function to compute reward
             num_initial_actions: Number of initial actions to sample (A)
             horizon_per_action: Number of actions to consider for each state (Horizon)
@@ -38,33 +36,9 @@ class SITCOMInference:
             temperature: Temperature for sampling
             render_tree: Whether to render the tree
             logging_dir: Directory for logging
+            policy_setup: Policy setup for the OpenVLA model
+            action_scale: Scaling factor for actions
         """
-        
-        # Create default reward function if not provided
-        if reward_function is None:
-            def default_reward_function(state, action=None):
-                # Example reward function based on distance
-                # You'll need to implement this based on your specific environment
-                gripper_pos = state.get("gripper_position", None)
-                object_pos = state.get("object_position", None)
-                plate_pos = state.get("plate_position", None)
-                
-                if gripper_pos is None or object_pos is None:
-                    return 0.0
-                
-                # Calculate distance between gripper and object
-                distance = np.linalg.norm(gripper_pos - object_pos)
-                
-                # If object is grabbed, measure distance to plate
-                is_grabbed = state.get("is_grabbed", False)
-                if is_grabbed and plate_pos is not None:
-                    distance = np.linalg.norm(gripper_pos - plate_pos)
-                
-                # Convert distance to reward (closer is better)
-                return -distance
-            
-            reward_function = default_reward_function
-        
         # Create the planner
         self.planner = TwoSimulatorPlanner(
             saved_model_path=saved_model_path,
@@ -80,16 +54,18 @@ class SITCOMInference:
             policy_setup=policy_setup,
             action_scale=action_scale,
         )
-
+        
+        self.task_description = None
     
     def reset(self, task_description: str) -> None:
         """
         Reset the model with a new task description.
         
+        Args:
             task_description: The task description
         """
         self.task_description = task_description
-        self.planner.reset()
+        self.planner.reset(task_description)
     
     def step(self, image, task_description, current_env):
         """
@@ -98,7 +74,7 @@ class SITCOMInference:
         Args:
             image: The current image observation
             task_description: The task description
-            override_action: Optional action to override planning
+            current_env: The current environment (first simulator)
             
         Returns:
             raw_action: The raw action from the model
@@ -107,10 +83,20 @@ class SITCOMInference:
         # Update task description if changed
         if task_description != self.task_description:
             self.task_description = task_description
-      
-        best_action = self.planner.plan(current_env, image, task_description=task_description)
-
-        return best_action
+            self.planner.reset(task_description)
+        
+        # Use the planner to get the best action
+        best_action = self.planner.plan(current_env, image, task_description)
+        
+        # Raw action would be needed for compatibility with the evaluation framework
+        # For simplicity, we use the same action as both raw and processed
+        raw_action = {
+            "world_vector": best_action["world_vector"],
+            "rotation_delta": best_action.get("rotation_delta", np.zeros(3)),
+            "open_gripper": best_action.get("open_gripper", np.zeros(1))
+        }
+        
+        return raw_action, best_action
     
     def visualize_epoch(self, actions, images, save_path=None):
         """
@@ -121,5 +107,7 @@ class SITCOMInference:
             images: List of images
             save_path: Path to save the visualization
         """
-        # Delegate to the original model
-        return self.model.visualize_epoch(actions, images, save_path)
+        # Delegate to the model's visualize_epoch method
+        # This is needed for compatibility with the evaluation framework
+        if hasattr(self.planner.model, 'visualize_epoch'):
+            return self.planner.model.visualize_epoch(actions, images, save_path)
