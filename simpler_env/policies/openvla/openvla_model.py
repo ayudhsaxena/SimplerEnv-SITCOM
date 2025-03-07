@@ -43,7 +43,8 @@ class OpenVLAInference:
             torch_dtype=torch.bfloat16,
             low_cpu_mem_usage=True,
             trust_remote_code=True,
-        ).cuda()
+            device_map="auto",
+        )
 
         self.image_size = image_size
         self.action_scale = action_scale
@@ -70,7 +71,7 @@ class OpenVLAInference:
         self.previous_gripper_action = None
 
     def step(
-        self, image: np.ndarray, task_description: Optional[str] = None, *args, **kwargs
+        self, image: np.ndarray, task_description: Optional[str] = None, **kwargs
     ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         """
         Input:
@@ -96,7 +97,7 @@ class OpenVLAInference:
 
         # predict action (7-dof; un-normalize for bridgev2)
         inputs = self.processor(prompt, image).to("cuda:0", dtype=torch.bfloat16)
-        raw_actions = self.vla.predict_action(**inputs, unnorm_key=self.unnorm_key, do_sample=False)[None]
+        raw_actions = self.vla.predict_action(**inputs, unnorm_key=self.unnorm_key, do_sample=True, **kwargs)[None]
         # print(f"*** raw actions {raw_actions} ***")
 
         raw_action = {
@@ -143,6 +144,26 @@ class OpenVLAInference:
         action["terminate_episode"] = np.array([0.0])
 
         return raw_action, action
+    
+    def sample_actions(self, image, task_description, num_samples, temperature):
+        """
+        Sample multiple actions from the model.
+        
+        Args:
+            image: The current image observation
+            task_description: The task description
+            num_samples: The number of samples to take
+            temperature: The temperature to use for sampling
+            
+        Returns:
+            raw_actions: The raw actions from the model
+        """
+        actions = []
+        for _ in range(num_samples):
+            _, action = self.step(image, task_description, temperature=temperature)
+            actions.append(action)
+        print(actions)
+        return actions
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
         image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)
@@ -179,3 +200,5 @@ class OpenVLAInference:
         axs["image"].set_xlabel("Time in one episode (subsampled)")
         plt.legend()
         plt.savefig(save_path)
+    
+

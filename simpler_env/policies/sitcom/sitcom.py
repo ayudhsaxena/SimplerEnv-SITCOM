@@ -1,6 +1,7 @@
-from two_simulator_planner import TwoSimulatorPlanner
+from simpler_env.policies.sitcom.two_simulator_planner import TwoSimulatorPlanner
+import numpy as np
 
-class PlanningModel:
+class SITCOMInference:
     """
     Wrapper model that uses the TwoSimulatorPlanner for decision making.
     This class implements the same interface as the original model used in evaluation.
@@ -8,9 +9,7 @@ class PlanningModel:
     
     def __init__(
         self,
-        env,
-        model,
-        openvla_model,
+        saved_model_path: str = "openvla/openvla-7b",
         reward_function=None,
         num_initial_actions=10,
         horizon_per_action=5,
@@ -20,6 +19,8 @@ class PlanningModel:
         temperature=1.0,
         render_tree=False,
         logging_dir="./results/planning",
+        policy_setup: str = "widowx_bridge",
+        action_scale: float = 1.0,
     ):
         """
         Initialize the planning model.
@@ -38,9 +39,6 @@ class PlanningModel:
             render_tree: Whether to render the tree
             logging_dir: Directory for logging
         """
-        self.env = env
-        self.model = model
-        self.openvla_model = openvla_model
         
         # Create default reward function if not provided
         if reward_function is None:
@@ -69,10 +67,7 @@ class PlanningModel:
         
         # Create the planner
         self.planner = TwoSimulatorPlanner(
-            env=env,
-            model=model,
-            openvla_model=openvla_model,
-            task_description=None,  # Will be set in reset
+            saved_model_path=saved_model_path,
             reward_function=reward_function,
             num_initial_actions=num_initial_actions,
             horizon_per_action=horizon_per_action,
@@ -82,26 +77,21 @@ class PlanningModel:
             temperature=temperature,
             render_tree=render_tree,
             logging_dir=logging_dir,
+            policy_setup=policy_setup,
+            action_scale=action_scale,
         )
-        
-        # Additional state
-        self.task_description = None
-        self.last_action = None
+
     
-    def reset(self, task_description):
+    def reset(self, task_description: str) -> None:
         """
         Reset the model with a new task description.
         
-        Args:
             task_description: The task description
         """
         self.task_description = task_description
-        self.planner.task_description = task_description
         self.planner.reset()
-        self.model.reset(task_description)
-        self.last_action = None
     
-    def step(self, image, task_description, override_action=None):
+    def step(self, image, task_description, current_env):
         """
         Take a step with the model.
         
@@ -117,24 +107,10 @@ class PlanningModel:
         # Update task description if changed
         if task_description != self.task_description:
             self.task_description = task_description
-            self.planner.task_description = task_description
-        
-        # Get the observation from the image
-        # This assumes your environment can construct an observation from an image
-        # You may need to adapt this to your specific environment
-        obs = self.env.get_observation_from_image(image)
-        
-        # Plan the best action or use override
-        if override_action is not None:
-            best_action = override_action
-        else:
-            best_action = self.planner.plan(obs, task_description)
-        
-        # Process the action through the model to get the correct format
-        raw_action, action = self.model.step(image, task_description, override_action=best_action)
-        
-        self.last_action = action
-        return raw_action, action
+      
+        best_action = self.planner.plan(current_env, image, task_description=task_description)
+
+        return best_action
     
     def visualize_epoch(self, actions, images, save_path=None):
         """

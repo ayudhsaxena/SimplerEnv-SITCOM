@@ -3,18 +3,16 @@ import copy
 import numpy as np
 from collections import defaultdict
 from typing import Dict, List, Tuple, Any, Optional, Union
-from simulation_node import SimulationNode
+from simpler_env.policies.sitcom.simulation_node import SimulationNode
+from simpler_env.policies.openvla.openvla_model import OpenVLAInference
 
 class TwoSimulatorPlanner:
     """Planning algorithm using two simulators."""
     
     def __init__(
         self,
-        env,
-        model,
-        openvla_model,
-        task_description,
         reward_function,
+        saved_model_path: str = "openvla/openvla-7b",
         num_initial_actions=10,  # A parameter
         horizon_per_action=5,    # Horizon parameter
         num_steps_ahead=3,       # h parameter
@@ -23,6 +21,8 @@ class TwoSimulatorPlanner:
         temperature=1.0,         # Temperature for sampling
         render_tree=False,       # Whether to render the tree
         logging_dir="./results/planning",
+        policy_setup: str = "widowx_bridge",
+        action_scale: float = 1.0,
     ):
         """
         Initialize the planner.
@@ -42,10 +42,8 @@ class TwoSimulatorPlanner:
             render_tree: Whether to render the tree
             logging_dir: Directory for logging
         """
-        self.env = env
-        self.model = model
-        self.openvla_model = openvla_model
-        self.task_description = task_description
+        self.model = OpenVLAInference(saved_model_path=saved_model_path, policy_setup=policy_setup, action_scale=action_scale)
+
         self.reward_function = reward_function
         
         # Hyperparameters
@@ -63,13 +61,14 @@ class TwoSimulatorPlanner:
         # Reset internal state
         self.reset()
     
-    def reset(self):
+    def reset(self, task_description=None):
         """Reset the planner."""
         self.simulation_tree = None
         self.best_trajectory = None
         self.best_reward = float('-inf')
+        self.model.reset(task_description=task_description)
         
-    def sample_actions_from_openvla(self, image, num_actions, temp=None):
+    def sample_actions_from_openvla(self, image, num_actions, temperature=None):
         """
         Sample actions from OpenVLA model.
         
@@ -81,10 +80,10 @@ class TwoSimulatorPlanner:
         Returns:
             List of sampled actions
         """
-        temperature = temp if temp is not None else self.temperature
+        temperature = temperature if temperature is not None else self.temperature
         # This is a placeholder for how you would call your OpenVLA model
         # The actual implementation will depend on your OpenVLA API
-        return self.openvla_model.sample_actions(
+        return self.model.sample_actions(
             image, 
             self.task_description, 
             num_samples=num_actions,
@@ -103,28 +102,21 @@ class TwoSimulatorPlanner:
             next_state, reward, image
         """
         # Create a copy of the state to avoid modifying the original
-        model_copy = copy.deepcopy(self.model)
+        state_copy = copy.deepcopy(state)
         
-        # Process the action similar to what's done in the evaluation code
-        raw_action, processed_action = model_copy.step(state["image"], self.task_description, override_action=action)
         
         # Simulate the action using the model (second simulator)
-        next_state, reward, done, truncated, info = model_copy.simulate(
-            state,
+        obs, reward, done, truncated, info = state_copy.step(
             np.concatenate([
-                processed_action["world_vector"], 
-                processed_action["rot_axangle"], 
-                processed_action["gripper"]
+                action["world_vector"], 
+                action["rot_axangle"], 
+                action["gripper"]
             ])
         )
+
+        image = get_image_from_maniskill2_obs_dict(state_copy, obs)
         
-        # Get the image from the next state
-        image = next_state.get("image", None)
-        if image is None and "obs" in next_state:
-            # Extract image using the utility function if not directly available
-            image = get_image_from_maniskill2_obs_dict(None, next_state["obs"])
-        
-        return next_state, reward, image, done
+        return state_copy, reward, image, done
     
     def compute_reward(self, state, action=None):
         """
@@ -179,7 +171,8 @@ class TwoSimulatorPlanner:
         # Sample initial actions
         initial_actions = self.sample_actions_from_openvla(
             root_image, 
-            self.num_initial_actions
+            self.num_initial_actions,
+            temperature=1.0
         )
         
         best_leaf_node = None
@@ -309,7 +302,7 @@ class TwoSimulatorPlanner:
         trajectory.reverse()
         return trajectory
     
-    def plan(self, obs, task_description=None):
+    def plan(self, current_env, image, task_description=None):
         """
         Plan the best action to take from the current state.
         
@@ -324,12 +317,8 @@ class TwoSimulatorPlanner:
         if task_description is not None:
             self.task_description = task_description
         
-        # Extract state and image from observation
-        state = {"obs": obs}  # Wrap observation in a state dict
-        image = get_image_from_maniskill2_obs_dict(self.env, obs)
-        
         # Build simulation tree and get the best action
-        best_action = self.build_simulation_tree(state, image)
+        best_action = self.build_simulation_tree(current_env, image)
         
         return best_action
     
