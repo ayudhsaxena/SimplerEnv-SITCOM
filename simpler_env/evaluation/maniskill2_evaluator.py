@@ -15,7 +15,31 @@ from simpler_env.utils.env.env_builder import (
 )
 from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
 from simpler_env.utils.visualization import write_interval_video, write_video
+from simpler_env.policies.sitcom.reward_functions import *
 
+def get_reward_function(env):
+    task_description = env.get_language_instruction()
+    print(f"Task description: {task_description}")
+
+    # Assign reward function based on task description
+    if "carrot on plate" in task_description:
+        reward_function = reward_for_put_carrot_on_plate
+        print("Using reward function for putting carrot on plate")
+    elif "green block on the yellow block" in task_description:
+        reward_function = reward_for_stack_green_on_yellow
+        print("Using reward function for stacking green block on yellow block")
+    elif "eggplant into yellow basket" in task_description:
+        reward_function = reward_for_put_eggplant_in_basket
+        print("Using reward function for putting eggplant in basket")
+    elif "spoon on the towel" in task_description:
+        reward_function = reward_for_put_spoon_on_tablecloth
+        print("Using reward function for putting spoon on towel")
+    else:
+        # Default reward function
+        print(f"Unknown task description: {task_description}. Using default reward function.")
+        reward_function = reward_for_put_carrot_on_plate
+
+        return reward_function
 
 def run_maniskill2_eval_single_episode(
     model,
@@ -107,6 +131,19 @@ def run_maniskill2_eval_single_episode(
     # Initialize model
     model.reset(task_description)
 
+    planning_env = None
+
+    if isinstance(model, SITCOMInference):
+        model.planner.reward_function = get_reward_function(env)
+
+        planning_env = build_maniskill2_env(
+            env_name,
+            **additional_env_build_kwargs,
+            **kwargs,
+        )
+        # Initialize planning environment with the same options
+        planning_env.reset(options=env_reset_options)
+
     timestep = 0
     success = "failure"
     # action_ensemble = model.action_ensemble_temp  if hasattr(model, "action_ensemble") else "none"
@@ -117,7 +154,7 @@ def run_maniskill2_eval_single_episode(
         # step the model; "raw_action" is raw model action output; "action" is the processed action to be sent into maniskill env
         if isinstance(model, SITCOMInference):
             # For SITCOM, we need to pass the environment to the step method
-            raw_action, action = model.step(image, task_description, env)
+            raw_action, action = model.step(image, task_description, planning_env)
         else:
             raw_action, action = model.step(image, task_description)
         predicted_actions.append(raw_action)
@@ -135,15 +172,6 @@ def run_maniskill2_eval_single_episode(
             ),
         )
 
-        print_structure(obs)
-        source_obj_pose = env.source_obj_pose
-        target_obj_pose = env.target_obj_pose
-        print('source pose = ', source_obj_pose)
-        print('target pose = ', target_obj_pose)
-
-        print('source name = ', env.episode_source_obj.name)
-        print('target name = ', env.episode_target_obj.name)        
-        exit()
 
         success = "success" if done else "failure"
         new_task_description = env.get_language_instruction()
