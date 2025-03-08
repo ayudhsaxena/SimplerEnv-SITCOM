@@ -90,6 +90,12 @@ def run_maniskill2_eval_single_episode(
         **additional_env_build_kwargs,
         **kwargs,
     )
+
+    planning_env = build_maniskill2_env(
+            env_name,
+            **additional_env_build_kwargs,
+            **kwargs,
+    )
     # __import__('ipdb').set_trace()
     # initialize environment
     env_reset_options = {
@@ -111,6 +117,7 @@ def run_maniskill2_eval_single_episode(
             "episode_id": obj_episode_id,
         }
     obs, _ = env.reset(options=env_reset_options)
+    obs2, _ =  planning_env.reset(options=env_reset_options)
     # for long-horizon environments, we check if the current subtask is the final subtask
     is_final_subtask = env.is_final_subtask()
 
@@ -131,18 +138,9 @@ def run_maniskill2_eval_single_episode(
     # Initialize model
     model.reset(task_description)
 
-    planning_env = None
 
     if isinstance(model, SITCOMInference):
-        model.planner.reward_function = get_reward_function(env)
-
-        planning_env = build_maniskill2_env(
-            env_name,
-            **additional_env_build_kwargs,
-            **kwargs,
-        )
-        # Initialize planning environment with the same options
-        planning_env.reset(options=env_reset_options)
+        model.reward_function = get_reward_function(env)
 
     timestep = 0
     success = "failure"
@@ -154,7 +152,7 @@ def run_maniskill2_eval_single_episode(
         # step the model; "raw_action" is raw model action output; "action" is the processed action to be sent into maniskill env
         if isinstance(model, SITCOMInference):
             # For SITCOM, we need to pass the environment to the step method
-            raw_action, action = model.step(image, task_description, planning_env)
+            raw_action, action = model.step(image, task_description, planning_env, kwargs, additional_env_build_kwargs)
         else:
             raw_action, action = model.step(image, task_description)
         predicted_actions.append(raw_action)

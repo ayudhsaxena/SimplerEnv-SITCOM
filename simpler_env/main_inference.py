@@ -88,6 +88,7 @@ if __name__ == "__main__":
         assert args.ckpt_path is not None
         from simpler_env.policies.sitcom.sitcom import SITCOMInference
         model = SITCOMInference(
+            env_name=args.env_name,
             saved_model_path=args.ckpt_path,
             policy_setup=args.policy_setup,
             action_scale=args.action_scale,

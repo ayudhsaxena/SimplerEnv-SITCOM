@@ -11,6 +11,7 @@ class TwoSimulatorPlanner:
     
     def __init__(
         self,
+        env_name,
         saved_model_path: str = "openvla/openvla-7b",
         reward_function=None,
         num_initial_actions=10,  # A parameter
@@ -42,6 +43,7 @@ class TwoSimulatorPlanner:
             policy_setup: Policy setup for the OpenVLA model
             action_scale: Scaling factor for actions
         """
+        self.env_name = env_name
         # Initialize the OpenVLA model for action sampling
         self.model = OpenVLAInference(
             saved_model_path=saved_model_path, 
@@ -142,7 +144,43 @@ class TwoSimulatorPlanner:
             self.model.reset(task_description)
             if self.verbose:
                 print(f"[TwoSimulatorPlanner] Reset with task: {task_description}")
+
+    def copy_state(self, state, kwargs, additional_env_build_kwargs):
+        if self.verbose:
+            print("[TwoSimulatorPlanner] Creating environment copy")
+
+        episode_id = None
+        if hasattr(state, 'episode_id'):
+            episode_id = state.episode_id
+        
+        # Create a new environment instance with the same configuration
+        from simpler_env.utils.env.env_builder import build_maniskill2_env
+        
+        # Create the new environment instance
+        state_copy = build_maniskill2_env(
+            self.env_name,
+             **additional_env_build_kwargs,
+            **kwargs,
+        )
+        
+        # Reset with the same options/state
+        reset_options = {
+            'seed': state._episode_seed if hasattr(state, '_episode_seed') else None,
+            'options': {
+                'episode_id': episode_id
+            }
+        }
+        
+        # Reset the environment
+        state_copy.reset(**reset_options)
+        
+        # If the environment supports state saving/loading
+        if hasattr(state, 'get_state') and hasattr(state_copy, 'set_state'):
+            current_state = state.get_state()
+            state_copy.set_state(current_state)
     
+        return state_copy
+
     def sample_actions_from_model(self, image, task_description, num_samples, temperature=None):
         """
         Sample actions from the model.
@@ -181,7 +219,7 @@ class TwoSimulatorPlanner:
         
         return actions
     
-    def simulate_action(self, state, action):
+    def simulate_action(self, state, action, kwargs, additional_env_build_kwargs):
         """
         Simulate an action using the second simulator.
         
@@ -199,7 +237,7 @@ class TwoSimulatorPlanner:
             print(f"  - Gripper: {action['gripper']}")
         
         # Create a copy of the state to avoid modifying the original
-        state_copy = copy.deepcopy(state)
+        state_copy = self.copy_state(state, kwargs, additional_env_build_kwargs)
         
         # Simulate the action using the model (second simulator)
         # For ManiSkill2, we need to concatenate action components
@@ -236,7 +274,7 @@ class TwoSimulatorPlanner:
         """
         return self.reward_function(state, action)
     
-    def select_best_actions(self, state, candidate_actions, num_best):
+    def select_best_actions(self, state, candidate_actions, num_best, kwargs, additional_env_build_kwargs):
         """
         Select the best actions based on the reward function.
         
@@ -259,7 +297,7 @@ class TwoSimulatorPlanner:
                 print(f"  - Evaluating action {i+1}/{len(candidate_actions)}")
             
             # Simulate the action to get the next state
-            next_state, _, _, _ = self.simulate_action(state, action)
+            next_state, _, _, _ = self.simulate_action(state, action, kwargs, additional_env_build_kwargs)
             
             # Compute the reward for the resulting state
             reward = self.compute_reward(next_state)
@@ -281,7 +319,7 @@ class TwoSimulatorPlanner:
         
         return best_actions
     
-    def build_simulation_tree(self, root_state, root_image, task_description):
+    def build_simulation_tree(self, root_state, root_image, task_description, kwargs, additional_env_build_kwargs):
         """
         Build a simulation tree by exploring possible actions.
         
@@ -317,7 +355,7 @@ class TwoSimulatorPlanner:
                 print(f"\n[TwoSimulatorPlanner] Exploring initial action {i+1}/{len(initial_actions)}")
             
             # Simulate the action to get the next state
-            next_state, reward, next_image, done = self.simulate_action(root_state, action)
+            next_state, reward, next_image, done = self.simulate_action(root_state, action, kwargs, additional_env_build_kwargs)
             
             # Create a child node
             child_node = SimulationNode(
@@ -343,7 +381,9 @@ class TwoSimulatorPlanner:
                 # Perform look-ahead simulation (h = num_steps_ahead)
                 leaf_node = self._simulate_ahead(
                     child_node, 
-                    task_description, 
+                    task_description,
+                    kwargs,
+                    additional_env_build_kwargs ,
                     current_depth=1
                 )
                 
@@ -390,7 +430,7 @@ class TwoSimulatorPlanner:
         
         return initial_actions[0] if initial_actions else None
     
-    def _simulate_ahead(self, node, task_description, current_depth=1):
+    def _simulate_ahead(self, node, task_description, kwargs, additional_env_build_kwargs, current_depth=1):
         """
         Recursively simulate ahead from a node.
         
@@ -422,7 +462,7 @@ class TwoSimulatorPlanner:
         best_actions = self.select_best_actions(
             node.state, 
             candidate_actions, 
-            self.num_best_actions
+            self.num_best_actions, kwargs, additional_env_build_kwargs
         )
         
         best_leaf = node
@@ -434,7 +474,7 @@ class TwoSimulatorPlanner:
                 print(f"    [Depth {current_depth}] Exploring action {i+1}/{len(best_actions)}")
             
             # Simulate the action
-            next_state, reward, next_image, done = self.simulate_action(node.state, action)
+            next_state, reward, next_image, done = self.simulate_action(node.state, action, kwargs, additional_env_build_kwargs)
             
             if self.verbose:
                 print(f"      - Step reward: {reward}")
@@ -458,6 +498,7 @@ class TwoSimulatorPlanner:
                 leaf_node = self._simulate_ahead(
                     child_node, 
                     task_description, 
+                    kwargs, additional_env_build_kwargs,
                     current_depth + 1
                 )
                 
@@ -502,7 +543,7 @@ class TwoSimulatorPlanner:
         trajectory.reverse()
         return trajectory
     
-    def plan(self, env, image, task_description=None):
+    def plan(self, env, image, task_description, kwargs, additional_env_build_kwargs):
         """
         Plan the best action to take from the current state.
         
@@ -529,9 +570,11 @@ class TwoSimulatorPlanner:
         # Record time for performance monitoring
         import time
         start_time = time.time()
+
+        # print('env plan = ', env_name)
         
         # Build simulation tree and get the best action
-        best_action = self.build_simulation_tree(env, image, self.task_description)
+        best_action = self.build_simulation_tree(env, image, self.task_description, kwargs, additional_env_build_kwargs)
         
         # Calculate planning time
         planning_time = time.time() - start_time

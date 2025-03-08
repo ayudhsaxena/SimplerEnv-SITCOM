@@ -9,6 +9,7 @@ class SITCOMInference:
     
     def __init__(
         self,
+        env_name,
         saved_model_path: str = "openvla/openvla-7b",
         reward_function=None,
         num_initial_actions=10,
@@ -41,6 +42,7 @@ class SITCOMInference:
         """
         # Create the planner
         self.planner = TwoSimulatorPlanner(
+            env_name=env_name,
             saved_model_path=saved_model_path,
             reward_function=reward_function,
             num_initial_actions=num_initial_actions,
@@ -67,7 +69,7 @@ class SITCOMInference:
         self.task_description = task_description
         self.planner.reset(task_description)
     
-    def step(self, image, task_description, current_env):
+    def step(self, image, task_description, current_env, kwargs, additional_env_build_kwargs):
         """
         Take a step with the model.
         
@@ -85,8 +87,8 @@ class SITCOMInference:
             self.task_description = task_description
             self.planner.reset(task_description)
         
-        # Use the planner to get the best action
-        best_action = self.planner.plan(current_env, image, task_description)
+        # Use the planner to get the best actio
+        best_action = self.planner.plan(current_env, image, task_description, kwargs, additional_env_build_kwargs)
         
         # Raw action would be needed for compatibility with the evaluation framework
         # For simplicity, we use the same action as both raw and processed
