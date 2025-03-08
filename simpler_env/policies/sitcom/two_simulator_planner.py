@@ -23,6 +23,7 @@ class TwoSimulatorPlanner:
         logging_dir="./results/planning",
         policy_setup: str = "widowx_bridge",
         action_scale: float = 1.0,
+        verbose=True,           # Control logging verbosity
     ):
         """
         Initialize the planner.
@@ -65,12 +66,25 @@ class TwoSimulatorPlanner:
         # Visualization settings
         self.render_tree = render_tree
         self.logging_dir = logging_dir
+        self.verbose = verbose
         
         # Task description
         self.task_description = None
         
         # Reset internal state
         self.reset()
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Initialized with parameters:")
+            print(f"  - Model: {saved_model_path}")
+            print(f"  - Initial actions (A): {num_initial_actions}")
+            print(f"  - Horizon per action: {horizon_per_action}")
+            print(f"  - Steps ahead (h): {num_steps_ahead}")
+            print(f"  - Candidates: {num_candidates}")
+            print(f"  - Best actions: {num_best_actions}")
+            print(f"  - Temperature: {temperature}")
+            print(f"  - Policy setup: {policy_setup}")
+            print(f"  - Action scale: {action_scale}")
     
     def _default_reward_function(self, state, action=None):
         """
@@ -126,6 +140,8 @@ class TwoSimulatorPlanner:
         if task_description is not None:
             self.task_description = task_description
             self.model.reset(task_description)
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Reset with task: {task_description}")
     
     def sample_actions_from_model(self, image, task_description, num_samples, temperature=None):
         """
@@ -140,17 +156,28 @@ class TwoSimulatorPlanner:
         Returns:
             List of sampled actions
         """
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Sampling {num_samples} actions")
+        
         actions = []
         temperature = temperature if temperature is not None else self.temperature
         
         # Sample actions from the model
-        for _ in range(num_samples):
+        for i in range(num_samples):
+            if self.verbose:
+                print(f"  - Sampling action {i+1}/{num_samples} (temp={temperature:.2f})")
+            
             raw_action, action = self.model.step(
                 image, 
                 task_description, 
                 temperature=temperature
             )
             actions.append(action)
+            
+            if self.verbose:
+                print(f"    - Action vector: {action['world_vector']}")
+                print(f"    - Rotation: {action['rot_axangle']}")
+                print(f"    - Gripper: {action['gripper']}")
         
         return actions
     
@@ -165,6 +192,12 @@ class TwoSimulatorPlanner:
         Returns:
             next_state, reward, image, done
         """
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Simulating action in second simulator:")
+            print(f"  - World vector: {action['world_vector']}")
+            print(f"  - Rotation: {action['rot_axangle']}")
+            print(f"  - Gripper: {action['gripper']}")
+        
         # Create a copy of the state to avoid modifying the original
         state_copy = copy.deepcopy(state)
         
@@ -178,6 +211,12 @@ class TwoSimulatorPlanner:
         
         # Step the environment with the action
         obs, reward, done, truncated, info = state_copy.step(action_array)
+        
+        if self.verbose:
+            print(f"  - Reward: {reward}")
+            print(f"  - Done: {done}")
+            if done:
+                print(f"  - Task completed in simulation!")
         
         # Extract the image from the observation
         image = get_image_from_maniskill2_obs_dict(state_copy, obs)
@@ -209,15 +248,24 @@ class TwoSimulatorPlanner:
         Returns:
             best_actions: List of best actions
         """
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Selecting best {num_best} actions from {len(candidate_actions)} candidates")
+        
         # Compute rewards for all candidate actions
         action_rewards = []
         
-        for action in candidate_actions:
+        for i, action in enumerate(candidate_actions):
+            if self.verbose:
+                print(f"  - Evaluating action {i+1}/{len(candidate_actions)}")
+            
             # Simulate the action to get the next state
             next_state, _, _, _ = self.simulate_action(state, action)
             
             # Compute the reward for the resulting state
             reward = self.compute_reward(next_state)
+            
+            if self.verbose:
+                print(f"    - Reward: {reward}")
             
             # Store the action and its reward
             action_rewards.append((action, reward))
@@ -225,6 +273,11 @@ class TwoSimulatorPlanner:
         # Sort by reward (descending) and select the best actions
         action_rewards.sort(key=lambda x: x[1], reverse=True)
         best_actions = [action for action, _ in action_rewards[:num_best]]
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Selected {len(best_actions)} best actions:")
+            for i, (action, reward) in enumerate(action_rewards[:num_best]):
+                print(f"  - Action {i+1}: reward={reward}")
         
         return best_actions
     
@@ -240,6 +293,10 @@ class TwoSimulatorPlanner:
         Returns:
             best_action: The best action to take
         """
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Building simulation tree for task: {task_description}")
+            print(f"  - Sampling {self.num_initial_actions} initial actions (A parameter)")
+        
         # Create the root node
         root_node = SimulationNode(root_state, root_image)
         
@@ -256,6 +313,9 @@ class TwoSimulatorPlanner:
         
         # For each initial action, simulate and build a subtree
         for i, action in enumerate(initial_actions):
+            if self.verbose:
+                print(f"\n[TwoSimulatorPlanner] Exploring initial action {i+1}/{len(initial_actions)}")
+            
             # Simulate the action to get the next state
             next_state, reward, next_image, done = self.simulate_action(root_state, action)
             
@@ -271,8 +331,15 @@ class TwoSimulatorPlanner:
             child_node.original_action_idx = i  # Keep track of which initial action this is
             root_node.add_child(child_node)
             
+            if self.verbose:
+                print(f"  - Initial simulation reward: {reward}")
+                print(f"  - Task completed: {done}")
+            
             # Explore this subtree further if not done
             if not done:
+                if self.verbose:
+                    print(f"  - Looking ahead {self.num_steps_ahead} steps")
+                
                 # Perform look-ahead simulation (h = num_steps_ahead)
                 leaf_node = self._simulate_ahead(
                     child_node, 
@@ -280,15 +347,24 @@ class TwoSimulatorPlanner:
                     current_depth=1
                 )
                 
+                if self.verbose:
+                    print(f"  - Best leaf node reward: {leaf_node.reward}")
+                
                 # Update best leaf node if better reward
                 if leaf_node.reward > best_reward:
                     best_reward = leaf_node.reward
                     best_leaf_node = leaf_node
+                    
+                    if self.verbose:
+                        print(f"  - New best reward found: {best_reward}")
             
             # If done but reward is better than current best
             elif child_node.reward > best_reward:
                 best_reward = child_node.reward
                 best_leaf_node = child_node
+                
+                if self.verbose:
+                    print(f"  - Task completed with reward: {best_reward}")
         
         # Store the tree and best trajectory
         self.simulation_tree = root_node
@@ -298,9 +374,20 @@ class TwoSimulatorPlanner:
         if best_leaf_node:
             self.best_trajectory = self._backtrack_to_root(best_leaf_node)
             best_initial_action = initial_actions[best_leaf_node.original_action_idx]
+            
+            if self.verbose:
+                print(f"\n[TwoSimulatorPlanner] Selected best initial action with index {best_leaf_node.original_action_idx}")
+                print(f"  - Best reward: {best_reward}")
+                print(f"  - World vector: {best_initial_action['world_vector']}")
+                print(f"  - Rotation: {best_initial_action['rot_axangle']}")
+                print(f"  - Gripper: {best_initial_action['gripper']}")
+            
             return best_initial_action
         
         # Fallback to the first action if no simulation was successful
+        if self.verbose:
+            print(f"\n[TwoSimulatorPlanner] No good action found, falling back to first action")
+        
         return initial_actions[0] if initial_actions else None
     
     def _simulate_ahead(self, node, task_description, current_depth=1):
@@ -317,7 +404,12 @@ class TwoSimulatorPlanner:
         """
         # If we've reached the maximum depth or this is a terminal state, return this node
         if current_depth >= self.num_steps_ahead or node.reward == float('inf'):
+            if self.verbose:
+                print(f"    [Depth {current_depth}] Reached max depth or terminal state, stopping")
             return node
+        
+        if self.verbose:
+            print(f"    [Depth {current_depth}] Simulating ahead, sampling {self.num_candidates} candidates")
         
         # Sample candidate actions from this state (typically more than we'll use)
         candidate_actions = self.sample_actions_from_model(
@@ -337,9 +429,17 @@ class TwoSimulatorPlanner:
         best_reward = node.reward
         
         # Explore each of the best actions
-        for action in best_actions:
+        for i, action in enumerate(best_actions):
+            if self.verbose:
+                print(f"    [Depth {current_depth}] Exploring action {i+1}/{len(best_actions)}")
+            
             # Simulate the action
             next_state, reward, next_image, done = self.simulate_action(node.state, action)
+            
+            if self.verbose:
+                print(f"      - Step reward: {reward}")
+                print(f"      - Cumulative reward: {node.reward + reward}")
+                print(f"      - Done: {done}")
             
             # Create a child node with cumulative reward
             child_node = SimulationNode(
@@ -363,13 +463,20 @@ class TwoSimulatorPlanner:
                 
                 # Update best leaf if needed
                 if leaf_node.reward > best_reward:
+                    if self.verbose:
+                        print(f"      - New best leaf found with reward: {leaf_node.reward}")
                     best_reward = leaf_node.reward
                     best_leaf = leaf_node
             
             # If done but reward is better than current best
             elif child_node.reward > best_reward:
+                if self.verbose:
+                    print(f"      - Task completed with better reward: {child_node.reward}")
                 best_reward = child_node.reward
                 best_leaf = child_node
+        
+        if self.verbose:
+            print(f"    [Depth {current_depth}] Best reward in subtree: {best_reward}")
         
         return best_leaf
     
@@ -407,12 +514,34 @@ class TwoSimulatorPlanner:
         Returns:
             best_action: The best action to take
         """
+        if self.verbose:
+            print("\n" + "="*80)
+            print(f"[TwoSimulatorPlanner] Starting planning process")
+            print("="*80)
+        
         # Update task description if provided
         if task_description is not None:
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
             self.task_description = task_description
             self.model.reset(task_description)
         
+        # Record time for performance monitoring
+        import time
+        start_time = time.time()
+        
         # Build simulation tree and get the best action
         best_action = self.build_simulation_tree(env, image, self.task_description)
+        
+        # Calculate planning time
+        planning_time = time.time() - start_time
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Planning completed in {planning_time:.2f} seconds")
+            print(f"[TwoSimulatorPlanner] Selected action:")
+            print(f"  - World vector: {best_action['world_vector']}")
+            print(f"  - Rotation: {best_action['rot_axangle']}")
+            print(f"  - Gripper: {best_action['gripper']}")
+            print("="*80 + "\n")
         
         return best_action

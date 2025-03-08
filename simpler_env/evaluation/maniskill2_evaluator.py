@@ -6,6 +6,8 @@ import os
 
 import numpy as np
 from transforms3d.euler import quat2euler
+from simpler_env.policies.sitcom.sitcom import SITCOMInference
+from simpler_env.policies.sitcom.utils import print_structure
 
 from simpler_env.utils.env.env_builder import (
     build_maniskill2_env,
@@ -132,6 +134,16 @@ def run_maniskill2_eval_single_episode(
                 [action["world_vector"], action["rot_axangle"], action["gripper"]]
             ),
         )
+
+        print_structure(obs)
+        source_obj_pose = env.source_obj_pose
+        target_obj_pose = env.target_obj_pose
+        print('source pose = ', source_obj_pose)
+        print('target pose = ', target_obj_pose)
+
+        print('source name = ', env.episode_source_obj.name)
+        print('target name = ', env.episode_target_obj.name)        
+        exit()
 
         success = "success" if done else "failure"
         new_task_description = env.get_language_instruction()
