@@ -15,31 +15,8 @@ from simpler_env.utils.env.env_builder import (
 )
 from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
 from simpler_env.utils.visualization import write_interval_video, write_video
-from simpler_env.policies.sitcom.reward_functions import *
 
-def get_reward_function(env):
-    task_description = env.get_language_instruction()
-    print(f"Task description: {task_description}")
 
-    # Assign reward function based on task description
-    if "carrot on plate" in task_description:
-        reward_function = reward_for_put_carrot_on_plate
-        print("Using reward function for putting carrot on plate")
-    elif "green block on the yellow block" in task_description:
-        reward_function = reward_for_stack_green_on_yellow
-        print("Using reward function for stacking green block on yellow block")
-    elif "eggplant into yellow basket" in task_description:
-        reward_function = reward_for_put_eggplant_in_basket
-        print("Using reward function for putting eggplant in basket")
-    elif "spoon on the towel" in task_description:
-        reward_function = reward_for_put_spoon_on_tablecloth
-        print("Using reward function for putting spoon on towel")
-    else:
-        # Default reward function
-        print(f"Unknown task description: {task_description}. Using default reward function.")
-        reward_function = reward_for_put_carrot_on_plate
-
-        return reward_function
 
 def run_maniskill2_eval_single_episode(
     model,
@@ -138,9 +115,6 @@ def run_maniskill2_eval_single_episode(
     # Initialize model
     model.reset(task_description)
 
-
-    if isinstance(model, SITCOMInference):
-        model.reward_function = get_reward_function(env)
 
     timestep = 0
     success = "failure"

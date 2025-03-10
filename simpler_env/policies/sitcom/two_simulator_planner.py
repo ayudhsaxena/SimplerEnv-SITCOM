@@ -24,7 +24,7 @@ class TwoSimulatorPlanner:
         logging_dir="./results/planning",
         policy_setup: str = "widowx_bridge",
         action_scale: float = 1.0,
-        verbose=True,           # Control logging verbosity
+        verbose=False,           # Control logging verbosity
     ):
         """
         Initialize the planner.
@@ -50,6 +50,7 @@ class TwoSimulatorPlanner:
             policy_setup=policy_setup, 
             action_scale=action_scale
         )
+        
         
         # Set up reward function or use default
         if reward_function is None:

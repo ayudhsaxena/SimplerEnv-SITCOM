@@ -5,6 +5,8 @@ import tensorflow as tf
 
 from simpler_env.evaluation.argparse import get_args
 from simpler_env.evaluation.maniskill2_evaluator import maniskill2_evaluator
+from simpler_env.policies.sitcom.reward_functions import *
+
 
 try:
     from simpler_env.policies.sitcom.sitcom import SITCOMInference
@@ -87,9 +89,30 @@ if __name__ == "__main__":
     elif args.policy_model == "sitcom":
         assert args.ckpt_path is not None
         from simpler_env.policies.sitcom.sitcom import SITCOMInference
+        
+        def get_reward_function(env_name):
+            print(f"Getting reward function for {env_name}")
+            
+            if "PutCarrotOnPlateInScene" in env_name:
+                return reward_for_put_carrot_on_plate
+            elif "StackGreenOnYellowInScene" in env_name:
+                return reward_for_stack_green_on_yellow
+            elif "PutEggplantInBasketInScene" in env_name:
+                return reward_for_put_eggplant_in_basket
+            elif "PutSpoonOnTableclothInScene" in env_name:
+                return reward_for_put_spoon_on_tablecloth
+            else:
+                # Default reward function
+                print(f"Unknown environment name: {env_name}. Using default reward function.")
+                return reward_for_put_carrot_on_plate
+
+            
+        reward_function = get_reward_function(args.env_name)
+        
         model = SITCOMInference(
             env_name=args.env_name,
             saved_model_path=args.ckpt_path,
+            reward_function=reward_function,
             policy_setup=args.policy_setup,
             action_scale=args.action_scale,
             # Add the new planning parameters here
