@@ -572,6 +572,10 @@ class TwoSimulatorPlanner:
         import time
         start_time = time.time()
 
+
+        # print('env plan = ', env_name)
+        
+        
         # print('env plan = ', env_name)
         
         # Build simulation tree and get the best action
@@ -589,3 +593,230 @@ class TwoSimulatorPlanner:
             print("="*80 + "\n")
         
         return best_action
+    
+    def plan_trajectory(self, env, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+        """
+        Plan and evaluate multiple trajectories, returning the best one based on final reward.
+        
+        Args:
+            env: The current environment state (first simulator)
+            image: The current image observation
+            task_description: Optional updated task description
+            kwargs: Additional arguments for environment building
+            additional_env_build_kwargs: Additional environment building arguments
+            trajectory_length: The number of actions to include in each trajectory
+            num_trajectories: Number of different trajectories to evaluate
+            
+        Returns:
+            best_trajectory: List of actions forming the best trajectory
+        """
+        if self.verbose:
+            print("\n" + "="*80)
+            print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
+            print(f"[TwoSimulatorPlanner] Evaluating {num_trajectories} trajectories of length {trajectory_length}")
+            print("="*80)
+        
+        # Update task description if provided
+        if task_description is not None:
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
+            self.task_description = task_description
+            self.model.reset(task_description)
+        
+        # Record time for performance monitoring
+        import time
+        start_time = time.time()
+        
+        # Track best trajectory and its final reward
+        best_trajectory = None
+        best_final_reward = float('-inf')
+        
+        # Generate and evaluate multiple trajectories
+        for traj_idx in range(num_trajectories):
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{num_trajectories}")
+            
+            # Initialize trajectory for this run
+            trajectory_actions = []
+            current_env = self.copy_state(env, kwargs, additional_env_build_kwargs)
+            current_image = image
+            
+            # Generate a sequence of actions for this trajectory
+            for step in range(trajectory_length):
+                if self.verbose:
+                    print(f"  - Planning step {step+1}/{trajectory_length}")
+                
+                # Sample actions from the model with temperature to ensure diversity
+                actions = self.sample_actions_from_model(
+                    current_image, 
+                    self.task_description, 
+                    num_samples=1,  # Just sample one action at a time for the trajectory
+                    temperature=self.temperature
+                )
+                
+                if not actions:
+                    if self.verbose:
+                        print("  - Failed to sample actions, ending trajectory early")
+                    break
+                    
+                action = actions[0]
+                trajectory_actions.append(action)
+                
+                # Simulate this action to update the environment state for the next step
+                next_env, reward, next_image, done = self.simulate_action(
+                    current_env, action, kwargs, additional_env_build_kwargs
+                )
+                
+                # Update the current state and image
+                current_env = next_env
+                current_image = next_image
+                
+                if self.verbose:
+                    print(f"  - Simulated step reward: {reward}")
+                
+                # If task is done, we can stop this trajectory
+                if done:
+                    if self.verbose:
+                        print(f"  - Task completed after {step+1} steps")
+                    break
+            
+            # Compute final reward for this trajectory
+            final_reward = self.compute_reward(current_env)
+            
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
+            
+            # print reward for the trajectory
+            print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
+            # Update best trajectory if this one is better
+            if final_reward > best_final_reward:
+                best_final_reward = final_reward
+                best_trajectory = trajectory_actions
+                
+                if self.verbose:
+                    print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
+        
+        # Calculate planning time
+        planning_time = time.time() - start_time
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")
+            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+            print("="*80 + "\n")
+        
+        return best_trajectory or []  # Return empty list if no trajectory was found
+    
+    
+    def debug_trajectory_planning(self, env, image, task_description, kwargs, additional_env_build_kwargs, dummy):
+        """
+        Debug method to test if environment copying and simulation work correctly
+        by testing two predefined trajectories.
+        """
+        import numpy as np
+        
+        if self.verbose:
+            print("\n" + "="*80)
+            print("[DEBUG] Testing environment copying and trajectory simulation")
+            print("="*80)
+        
+        # Create two copies of the environment
+        env_good = self.copy_state(env, kwargs, additional_env_build_kwargs)
+        env_bad = self.copy_state(env, kwargs, additional_env_build_kwargs)
+        
+        # Predefined "good" action (customize for your environment)
+        good_action = {
+            "world_vector": np.array([0.05, 0.0, 0.02]),
+            "rot_axangle": np.array([0.0, 0.0, 0.0]),
+            "gripper": np.array([1.0])
+        }
+        
+        # Predefined "bad" action (customize for your environment)
+        bad_action = {
+            "world_vector": np.array([-0.05, 0.0, -0.02]),
+            "rot_axangle": np.array([0.3, 0.0, 0.0]),
+            "gripper": np.array([0.0])
+        }
+        
+        # Simulate good trajectory
+        if self.verbose:
+            print("\n[DEBUG] Simulating 'good' trajectory")
+        
+        good_rewards = []
+        current_env = env_good
+        current_image = image
+        
+        for step in range(5):  # 5 steps with the good action
+            if self.verbose:
+                print(f"  Step {step+1}: Applying good action")
+            
+            next_env, reward, next_image, done = self.simulate_action(
+                current_env, good_action, kwargs, additional_env_build_kwargs
+            )
+            
+            good_rewards.append(reward)
+            
+            if self.verbose:
+                print(f"    Reward: {reward}")
+                print(f"    Done: {done}")
+            
+            current_env = next_env
+            current_image = next_image
+            
+            if done:
+                break
+        
+        # Calculate final reward for good trajectory
+        good_final_reward = self.compute_reward(current_env)
+        
+        # Simulate bad trajectory
+        if self.verbose:
+            print("\n[DEBUG] Simulating 'bad' trajectory")
+        
+        bad_rewards = []
+        current_env = env_bad
+        current_image = image
+        
+        for step in range(5):  # 5 steps with the bad action
+            if self.verbose:
+                print(f"  Step {step+1}: Applying bad action")
+            
+            next_env, reward, next_image, done = self.simulate_action(
+                current_env, bad_action, kwargs, additional_env_build_kwargs
+            )
+            
+            bad_rewards.append(reward)
+            
+            if self.verbose:
+                print(f"    Reward: {reward}")
+                print(f"    Done: {done}")
+            
+            current_env = next_env
+            current_image = next_image
+            
+            if done:
+                break
+        
+        # Calculate final reward for bad trajectory
+        bad_final_reward = self.compute_reward(current_env)
+        
+        # Compare and report results
+        # if self.verbose:
+        print("\n[DEBUG] Results comparison:")
+        print(f"  Good trajectory final reward: {good_final_reward}")
+        print(f"  Bad trajectory final reward: {bad_final_reward}")
+        print(f"  Difference: {good_final_reward - bad_final_reward}")
+        
+        if good_final_reward > bad_final_reward:
+            print("\n[DEBUG] TEST PASSED: Good trajectory produced better reward")
+            print("  Environment copying and simulation appear to be working correctly")
+        else:
+            print("\n[DEBUG] TEST FAILED: Bad trajectory did not produce better reward")
+            print("  This may indicate an issue with environment copying, simulation, or reward function")
+        
+        return {
+            "good_rewards": good_rewards,
+            "bad_rewards": bad_rewards,
+            "good_final_reward": good_final_reward,
+            "bad_final_reward": bad_final_reward,
+            "test_passed": good_final_reward > bad_final_reward
+        }

@@ -1,5 +1,6 @@
 from simpler_env.policies.sitcom.two_simulator_planner import TwoSimulatorPlanner
 import numpy as np
+from collections import deque
 
 class SITCOMInference:
     """
@@ -22,6 +23,7 @@ class SITCOMInference:
         logging_dir="./results/planning",
         policy_setup: str = "widowx_bridge",
         action_scale: float = 1.0,
+        trajectory_length: int = 10,  # New parameter for trajectory length
     ):
         """
         Initialize the wrapper for the planning model.
@@ -39,6 +41,7 @@ class SITCOMInference:
             logging_dir: Directory for logging
             policy_setup: Policy setup for the OpenVLA model
             action_scale: Scaling factor for actions
+            trajectory_length: Length of trajectory to request from planner
         """
         # Create the planner
         self.planner = TwoSimulatorPlanner(
@@ -58,6 +61,8 @@ class SITCOMInference:
         )
         
         self.task_description = None
+        self.action_buffer = deque()  # Buffer to store trajectory actions
+        self.trajectory_length = trajectory_length
     
     def reset(self, task_description: str) -> None:
         """
@@ -68,6 +73,7 @@ class SITCOMInference:
         """
         self.task_description = task_description
         self.planner.reset(task_description)
+        self.action_buffer.clear()  # Clear the action buffer on reset
     
     def step(self, image, task_description, current_env, kwargs, additional_env_build_kwargs):
         """
@@ -86,12 +92,32 @@ class SITCOMInference:
         if task_description != self.task_description:
             self.task_description = task_description
             self.planner.reset(task_description)
+            self.action_buffer.clear()  # Clear buffer when task changes
         
-        # Use the planner to get the best actio
-        best_action = self.planner.plan(current_env, image, task_description, kwargs, additional_env_build_kwargs)
+        # Check if buffer is empty
+        if not self.action_buffer:
+            # Get a new trajectory from the planner
+            trajectory = self.planner.plan_trajectory(
+                current_env, 
+                image, 
+                task_description, 
+                kwargs, 
+                additional_env_build_kwargs,
+                self.trajectory_length
+            )
+            
+            # Fill the buffer with the trajectory actions
+            for action in trajectory:
+                self.action_buffer.append(action)
+        
+        # Get the next action from the buffer
+        best_action = self.action_buffer.popleft() if self.action_buffer else None
+        
+        # If buffer was empty and planner couldn't provide a trajectory, fall back to single action planning
+        if best_action is None:
+            best_action = self.planner.plan(current_env, image, task_description, kwargs, additional_env_build_kwargs)
         
         # Raw action would be needed for compatibility with the evaluation framework
-        # For simplicity, we use the same action as both raw and processed
         raw_action = {
             "world_vector": best_action["world_vector"],
             "rotation_delta": best_action.get("rotation_delta", np.zeros(3)),
