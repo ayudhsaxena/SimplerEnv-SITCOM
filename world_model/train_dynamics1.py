@@ -19,7 +19,7 @@ run_id = "4f4c35d2"
 results_folder = os.path.join(save_folder, run_name + "_" + run_id)
 # results_folder = os.path.join(save_folder, run_name)
 
-wandb_mode = "disabled"
+wandb_mode = "online"
 wandb_kwargs = {
     "wandb": {
         "mode": wandb_mode,
@@ -36,7 +36,7 @@ if os.path.exists(ckpt_path):
 trainer = DynamicsModelTrainer(
     laq,
     folder=["bridge"],
-    batch_size=128,
+    batch_size=120,
     grad_accum_every=1,
     use_ema=False,
     num_train_steps=250000,
