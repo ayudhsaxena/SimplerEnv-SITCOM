@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 from torchvision.models import vit_b_16, vit_b_32, vit_l_16, vit_l_32
 from torchvision.models.vision_transformer import (
-    VisionTransformer as TorchVisionTransformer,
     interpolate_embeddings,
 )
+from torchvision.models.vision_transformer import VisionTransformer as TorchVisionTransformer
 
 
 class VisionTransformerEncoder(nn.Module):
@@ -40,12 +40,8 @@ class VisionTransformerEncoder(nn.Module):
         else:
             raise ValueError("Invalid model type. Choose 'base_16/32', 'large_16/32'.")
         if model.image_size != image_size:
-            new_state_dict = interpolate_embeddings(
-                image_size, patch_size, model.state_dict(), reset_heads=True
-            )
-            model.encoder.pos_embedding = nn.Parameter(
-                new_state_dict["encoder.pos_embedding"]
-            )
+            new_state_dict = interpolate_embeddings(image_size, patch_size, model.state_dict(), reset_heads=True)
+            model.encoder.pos_embedding = nn.Parameter(new_state_dict["encoder.pos_embedding"])
             msg = model.load_state_dict(new_state_dict, strict=False)
             print(f"Interpolated model state dict: {msg}")
         return model
@@ -61,9 +57,7 @@ class VisionTransformerEncoder(nn.Module):
         n = x.shape[0]
         device = x.device
         if self.if_normalize_img:
-            x = (x - self.normalize_img_mean.to(device)) / self.normalize_img_std.to(
-                device
-            )
+            x = (x - self.normalize_img_mean.to(device)) / self.normalize_img_std.to(device)
         x_tokens = self.model.conv_proj(x)
         x_tokens = x_tokens.reshape(n, self.model.hidden_dim, -1)
         x_tokens = x_tokens.permute(0, 2, 1)
@@ -81,7 +75,7 @@ class VisionTransformerEncoder(nn.Module):
 class DINOv2Encoder(nn.Module):
 
     def __init__(
-        self,         
+        self,
         image_size,
         patch_size,
         vit_size="reg_base",
@@ -104,7 +98,7 @@ class DINOv2Encoder(nn.Module):
         if model_type == "reg_base_14":
             model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14_reg")
         elif model_type == "base_14":
-            model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
+            model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14")
         else:
             raise ValueError("Invalid model type. Choose 'base_14', 'reg_base_14'.")
         return model
@@ -113,7 +107,7 @@ class DINOv2Encoder(nn.Module):
         device = x.device
         if self.if_normalize_img:
             x = (x - self.normalize_img_mean.to(device)) / self.normalize_img_std.to(device)
-        x_features = self.model.forward_features(x)['x_norm_patchtokens']
+        x_features = self.model.forward_features(x)["x_norm_patchtokens"]
         num_patches = x_features.shape[1]
         x_tokens = self.model.prepare_tokens_with_masks(x)[:, -num_patches:]
         return x_tokens, x_features
@@ -129,7 +123,9 @@ if __name__ == "__main__":
 
     # Forward pass through each encoder
     tokens, features = model(input_tensor)
-    import ipdb; ipdb.set_trace()
+    import ipdb
+
+    ipdb.set_trace()
 
     # Print output shapes
     print(f"Base ViT encoder output shape: {features.shape}")
