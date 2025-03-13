@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name=laq_vide4
+#SBATCH --output=jobs/laq_video4.%j.out
+#SBATCH --error=jobs/laq_video4.%j.err
+#SBATCH --partition=general
+#SBATCH --ntasks-per-node=8
+#SBATCH --gres=gpu:8
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=150G
+#SBATCH --time=2-00:00:00
+#SBATCH --constraint='A100_80GB|A6000|L40S|L40|A100_40GB'
+#SBATCH --exclude='babel-14-25,babel-11-5,babel-1-23,babel-13-13'
+
+
+export NCCL_P2P_DISABLE=1
+
+source /usr/share/Modules/init/bash
+module load cuda-12.4
+
+export PATH=/home/sroutra2/miniconda3/envs/lq/bin:$PATH
+# export LD_LIBRARY_PATH=/home/sroutra2/miniconda3/envs/lq/lib/python3.10/site-packages/nvidia/nvjitlink/lib:$LD_LIBRARY_PATH
+accelerate launch --num_processes=8 --mixed_precision=bf16 --main_process_port=27562 train_sthv2_video3.py
