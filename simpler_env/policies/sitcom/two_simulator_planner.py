@@ -6,6 +6,11 @@ from typing import Dict, List, Tuple, Any, Optional, Union
 from simpler_env.policies.sitcom.simulation_node import SimulationNode
 from simpler_env.policies.openvla.openvla_model import OpenVLAInference
 
+from simpler_env.utils.env.env_builder import (
+    build_maniskill2_env,
+    get_robot_control_mode,
+)
+
 class TwoSimulatorPlanner:
     """Planning algorithm using two simulators."""
     
@@ -48,7 +53,8 @@ class TwoSimulatorPlanner:
         self.model = OpenVLAInference(
             saved_model_path=saved_model_path, 
             policy_setup=policy_setup, 
-            action_scale=action_scale
+            action_scale=action_scale,
+            unnorm_key='simpler_rlds',
         )
         
         
@@ -145,6 +151,24 @@ class TwoSimulatorPlanner:
             self.model.reset(task_description)
             if self.verbose:
                 print(f"[TwoSimulatorPlanner] Reset with task: {task_description}")
+                
+    def get_to_state(self, env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs):
+        env = build_maniskill2_env(
+            env_name,
+            **additional_env_build_kwargs,
+            **kwargs,
+        )
+        obs, _ = env.reset(options=env_reset_options)
+        
+        for action in action_list:
+            obs, reward, done, truncated, info = env.step(
+                np.concatenate(
+                    [action["world_vector"], action["rot_axangle"], action["gripper"]]
+                ),
+            )
+        
+        return env
+        
 
     def copy_state(self, state, kwargs, additional_env_build_kwargs):
         if self.verbose:
@@ -238,7 +262,7 @@ class TwoSimulatorPlanner:
             print(f"  - Gripper: {action['gripper']}")
         
         # Create a copy of the state to avoid modifying the original
-        state_copy = self.copy_state(state, kwargs, additional_env_build_kwargs)
+        # state_copy = self.copy_state(state, kwargs, additional_env_build_kwargs)
         
         # Simulate the action using the model (second simulator)
         # For ManiSkill2, we need to concatenate action components
@@ -249,7 +273,7 @@ class TwoSimulatorPlanner:
         ])
         
         # Step the environment with the action
-        obs, reward, done, truncated, info = state_copy.step(action_array)
+        obs, reward, done, truncated, info = state.step(action_array)
         
         if self.verbose:
             print(f"  - Reward: {reward}")
@@ -258,9 +282,9 @@ class TwoSimulatorPlanner:
                 print(f"  - Task completed in simulation!")
         
         # Extract the image from the observation
-        image = get_image_from_maniskill2_obs_dict(state_copy, obs)
+        image = get_image_from_maniskill2_obs_dict(state, obs)
         
-        return state_copy, reward, image, done
+        return state, reward, image, done
     
     def compute_reward(self, state, action=None):
         """
@@ -594,7 +618,7 @@ class TwoSimulatorPlanner:
         
         return best_action
     
-    def plan_trajectory(self, env, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -638,7 +662,9 @@ class TwoSimulatorPlanner:
             
             # Initialize trajectory for this run
             trajectory_actions = []
-            current_env = self.copy_state(env, kwargs, additional_env_build_kwargs)
+            current_env = self.get_to_state(env_name, action_list,env_reset_options, kwargs, additional_env_build_kwargs)
+            # current_env = self.copy_state(env_name, kwargs, additional_env_build_kwargs)
+            # current_env = 
             current_image = image
             
             # Generate a sequence of actions for this trajectory
@@ -663,13 +689,13 @@ class TwoSimulatorPlanner:
                 trajectory_actions.append(action)
                 
                 # Simulate this action to update the environment state for the next step
-                next_env, reward, next_image, done = self.simulate_action(
+                current_env, reward, current_image, done = self.simulate_action(
                     current_env, action, kwargs, additional_env_build_kwargs
                 )
                 
-                # Update the current state and image
-                current_env = next_env
-                current_image = next_image
+                computed_reward = self.compute_reward(current_env)
+                # print(f"  - Simulated step reward: {computed_reward}")
+    
                 
                 if self.verbose:
                     print(f"  - Simulated step reward: {reward}")
@@ -696,6 +722,7 @@ class TwoSimulatorPlanner:
                 if self.verbose:
                     print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
+        print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
         # Calculate planning time
         planning_time = time.time() - start_time
         
