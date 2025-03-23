@@ -185,6 +185,8 @@ def run_maniskill2_eval_single_episode(
         )
         images.append(image)
         task_descriptions.append(task_description)
+        if success == "success":
+            break
         timestep += 1
 
     episode_stats = info.get("episode_stats", {})

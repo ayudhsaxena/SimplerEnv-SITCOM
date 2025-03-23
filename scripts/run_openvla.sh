@@ -12,23 +12,24 @@ tasks=(
 )
 
 ckpts=(
-  openvla/openvla-7b
+    /zfsauton2/home/hshah2/SITCOM/SITCOM/openvla/runs/openvla-7b+simpler_rlds+b6+lr-0.0005+lora-r16+dropout-0.0--image_aug
 )
+unnorm_key=simpler_rlds
 
 action_ensemble_temp=-0.8
 for ckpt_path in ${ckpts[@]}; do
   base_dir=$(dirname $ckpt_path)
 
   # evaluation in simulator
-  # logging_dir=$base_dir/simpler_env/$(basename $ckpt_path)${action_ensemble_temp}
+#   logging_dir=$base_dir/simpler_env/$(basename $ckpt_path)${action_ensemble_temp}
   logging_dir=results/$(basename $ckpt_path)${action_ensemble_temp}
   mkdir -p $logging_dir
   for i in ${!tasks[@]}; do
     task=${tasks[$i]}
     echo "🚀 running $task ..."
-    device=0
+    device=5
     session_name=CUDA${device}-$(basename $logging_dir)-${task}
-    bash scripts/$task $ckpt_path $model_name $action_ensemble_temp $logging_dir $device
+    bash scripts/$task $ckpt_path $model_name $action_ensemble_temp $logging_dir $device $unnorm_key
   done
 
   # statistics evalution results

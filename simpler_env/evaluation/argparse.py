@@ -126,7 +126,9 @@ def get_args():
     parser.add_argument('--temperature', type=float, default=1.0, 
                         help='Temperature for sampling')
     parser.add_argument('--render_tree', action='store_true', 
-                        help='Whether to render the tree')  
+                        help='Whether to render the tree')
+    parser.add_argument('--unnorm-key', type=str, default='simpler_rlds',
+                        help='Whether to unnormalize the actions')
 
     args = parser.parse_args()
 
