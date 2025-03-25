@@ -63,10 +63,12 @@ if __name__ == "__main__":
     elif args.policy_model == "openvla":
         assert args.ckpt_path is not None
         from simpler_env.policies.openvla.openvla_model import OpenVLAInference
+        print("Unnorm key: ", args.unnorm_key)
         model = OpenVLAInference(
             saved_model_path=args.ckpt_path,
             policy_setup=args.policy_setup,
             action_scale=args.action_scale,
+            unnorm_key=args.unnorm_key,
         )
     elif args.policy_model == "cogact":
         from simpler_env.policies.sim_cogact import CogACTInference
