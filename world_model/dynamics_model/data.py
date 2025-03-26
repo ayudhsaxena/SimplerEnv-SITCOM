@@ -20,7 +20,13 @@ num_trajs_oxe = {
     "kuka": {"trainval": 70000, "val": 7000},
 }
 
+num_trajs_ft = {
+    "simpler": {"trainval": 80, "val": 20},
+    "bridge": {"trainval": 25460, "val": 2546},
+}
+
 robot_data_root = "/data/hf_cache/OpenX/fractal"
+simpler_data_root = "/data/user_data/jasonl6/sandeep/datasets/simpler_finetune_data/aggregate_v3"
 
 
 def exists(val):
@@ -115,6 +121,43 @@ def process_ssv2_videos(root_dir: Path, mode: str) -> List[Path]:
     return paths
 
 
+def prcess_simpler_videos(dataset_name: str, mode: str):
+    data_root = Path(simpler_data_root)
+    env_dict: dict[str, list[str]] = {}
+    for env in data_root.iterdir():
+        if env.is_dir():
+            env_dict[str(env)] = []
+    
+    for env in env_dict:
+        env_dir = data_root / env
+        for traj in env_dir.iterdir():
+            if not traj.is_dir():
+                continue
+            env_dict[env].append(str(traj))
+    
+    local_random = random.Random(42)
+    for env in env_dict:
+        local_random.shuffle(env_dict[env])
+        assert len(env_dict[env]) == sum([x // len(env_dict) for x in num_trajs_ft[dataset_name].values()])
+        num_trajs = num_trajs_ft[dataset_name]["trainval"] // len(env_dict)
+        if mode == "trainval":
+            env_dict[env] = env_dict[env][:num_trajs]
+        elif mode == "val":
+            env_dict[env] = env_dict[env][num_trajs:]
+    data = []
+    for env in env_dict:
+        env_dir = data_root / env
+        for traj in env_dict[env]:
+            traj_dir = env_dir / traj
+            images_path = str(traj_dir / "images")
+            actions_file = str(traj_dir / "actions.npy")
+            actions = np.load(actions_file)
+            images = sorted(os.listdir(images_path))
+            for idx in range(len(images) - 1):
+                 data.append((os.path.join(images_path, images[idx]), actions[idx], os.path.join(images_path, images[idx + 1])))
+    return data
+            
+
 class DynamicsModelDataset(Dataset):
     def __init__(
         self,
@@ -137,6 +180,8 @@ class DynamicsModelDataset(Dataset):
                 self.data_list.extend(process_oxe_videos("bridge", mode))
             if "kuka" in data_dir:
                 self.data_list.extend(process_oxe_videos("kuka", mode))
+            if "simpler" in data_dir:
+                self.data_list.extend(prcess_simpler_videos("simpler", mode))
             if "ego4d" in data_dir:
                 raise NotImplementedError("ego4d dataset not implemented yet")
 
@@ -170,7 +215,7 @@ class DynamicsModelDataset(Dataset):
         # shuffle the video list
         local_random = random.Random(42)
         local_random.shuffle(self.data_list)
-        print(f"Found {len(self.data_list)} videos in {mode} mode!")
+        print(f"Found {len(self.data_list)} samples in {mode} mode!")
 
     def __len__(self):
         return len(self.data_list)
@@ -195,8 +240,8 @@ class DynamicsModelDataset(Dataset):
 
 if __name__ == "__main__":
     # test video dataset
-    dataset = DynamicsModelDataset(["bridge"], 256, mode="val")
-    t1 = dataset[337]
+    dataset = DynamicsModelDataset(["simpler"], 256, mode="trainval")
+    t1 = dataset[4]
     import ipdb
 
     ipdb.set_trace()
