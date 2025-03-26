@@ -15,9 +15,29 @@ from simpler_env.utils.env.env_builder import (
 )
 from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
 from simpler_env.utils.visualization import write_interval_video, write_video
+from simpler_env.policies.sitcom.reward_functions import *
 
 
 
+def get_reward_function(env_name):
+    print(f"Getting reward function for {env_name}")
+    
+    if "PutCarrotOnPlateInScene" in env_name:
+        return reward_for_put_carrot_on_plate
+    elif "StackGreenOnYellowInScene" in env_name:
+        return reward_for_stack_green_on_yellow
+    elif "PutEggplantInBasketInScene" in env_name:
+        return reward_for_put_eggplant_in_basket
+    elif "PutSpoonOnTableclothInScene" in env_name:
+        return reward_for_put_spoon_on_tablecloth
+    else:
+        # Default reward function
+        print(f"Unknown environment name: {env_name}. Using default reward function.")
+        return reward_for_put_carrot_on_plate
+
+    
+        
+        
 def run_maniskill2_eval_single_episode(
     model,
     ckpt_path,
@@ -115,6 +135,9 @@ def run_maniskill2_eval_single_episode(
     # Initialize model
     model.reset(task_description)
 
+    reward_function = get_reward_function(env_name)
+    
+    action_list = []
 
     timestep = 0
     success = "failure"
@@ -126,7 +149,7 @@ def run_maniskill2_eval_single_episode(
         # step the model; "raw_action" is raw model action output; "action" is the processed action to be sent into maniskill env
         if isinstance(model, SITCOMInference):
             # For SITCOM, we need to pass the environment to the step method
-            raw_action, action = model.step(image, task_description, planning_env, kwargs, additional_env_build_kwargs)
+            raw_action, action = model.step(image, task_description, env_name, action_list, env_reset_options,  kwargs, additional_env_build_kwargs)
         else:
             raw_action, action = model.step(image, task_description)
         predicted_actions.append(raw_action)
@@ -143,6 +166,20 @@ def run_maniskill2_eval_single_episode(
                 [action["world_vector"], action["rot_axangle"], action["gripper"]]
             ),
         )
+        
+        action_list.append(action)
+        
+        # save observation to understand how close is the gripper after taking an actual step
+        reward_cal = reward_function(env)
+        print("Reward after taking step in original env: ", reward_cal)
+        
+        # step the environment
+        obs_, reward_, done_, truncated_, info_ = planning_env.step(
+            np.concatenate(
+                [action["world_vector"], action["rot_axangle"], action["gripper"]]
+            ),
+        )
+        
 
 
         success = "success" if done else "failure"
@@ -159,6 +196,8 @@ def run_maniskill2_eval_single_episode(
         )
         images.append(image)
         task_descriptions.append(task_description)
+        if success == "success":
+            break
         timestep += 1
 
     episode_stats = info.get("episode_stats", {})

@@ -75,7 +75,7 @@ class SITCOMInference:
         self.planner.reset(task_description)
         self.action_buffer.clear()  # Clear the action buffer on reset
     
-    def step(self, image, task_description, current_env, kwargs, additional_env_build_kwargs):
+    def step(self, image, task_description, current_env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs):
         """
         Take a step with the model.
         
@@ -98,7 +98,9 @@ class SITCOMInference:
         if not self.action_buffer:
             # Get a new trajectory from the planner
             trajectory = self.planner.plan_trajectory(
-                current_env, 
+                current_env_name,
+                action_list,
+                env_reset_options,
                 image, 
                 task_description, 
                 kwargs, 

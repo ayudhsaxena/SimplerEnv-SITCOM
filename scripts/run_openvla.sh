@@ -11,8 +11,12 @@ tasks=(
   # put_in_drawer_visual_matching.sh
 )
 
+# ckpts=(
+#   openvla/openvla-7b
+# )
+
 ckpts=(
-  openvla/openvla-7b
+    /home/rishisha/SimplerEnv-SITCOM/openvla_finetuned/openvla-7b+simpler_rlds+b6+lr-0.0005+lora-r16+dropout-0.0--image_aug
 )
 
 action_ensemble_temp=-0.8
@@ -21,7 +25,7 @@ for ckpt_path in ${ckpts[@]}; do
 
   # evaluation in simulator
   # logging_dir=$base_dir/simpler_env/$(basename $ckpt_path)${action_ensemble_temp}
-  logging_dir=results/$(basename $ckpt_path)${action_ensemble_temp}
+  logging_dir=results-sitcom/$(basename $ckpt_path)${action_ensemble_temp}
   mkdir -p $logging_dir
   for i in ${!tasks[@]}; do
     task=${tasks[$i]}

@@ -38,9 +38,9 @@ def reward_for_put_carrot_on_plate(state, action=None):
             reward += 10.0  # Large bonus for successful placement
             
     # print different things
-    print(f"Reward: {reward}")
-    print(f"Is grasped: {is_grasped}")
-    print(f"gripper_to_source_dist: {gripper_to_source_dist}")
+    # print(f"Reward: {reward}")
+    # print(f"Is grasped: {is_grasped}")
+    # print(f"gripper_to_source_dist: {gripper_to_source_dist}")
     
     return reward
         
