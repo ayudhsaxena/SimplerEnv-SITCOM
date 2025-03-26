@@ -31,3 +31,5 @@ imgui.ini
 results/
 openvla_finetuned
 results-sitcom
+
+reward_scripts/outputs

@@ -7,6 +7,7 @@ tasks=(
 ckpts=(
   openvla/openvla-7b
 )
+unnorm_key=simpler_rlds
 
 action_ensemble_temp=-0.8
 for ckpt_path in ${ckpts[@]}; do
@@ -19,9 +20,9 @@ for ckpt_path in ${ckpts[@]}; do
   for i in ${!tasks[@]}; do
     task=${tasks[$i]}
     echo "🚀 running $task ..."
-    device=0,1,2,3
+    device=0,1,2,3,4,5,6,7
     session_name=CUDA${device}-$(basename $logging_dir)-${task}
-    bash scripts/$task $ckpt_path $model_name $action_ensemble_temp $logging_dir $device
+    bash scripts/$task $ckpt_path $model_name $action_ensemble_temp $logging_dir $device $unnorm_key
   done
 
   # statistics evalution results

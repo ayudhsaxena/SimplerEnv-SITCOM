@@ -58,6 +58,7 @@ class SITCOMInference:
             logging_dir=logging_dir,
             policy_setup=policy_setup,
             action_scale=action_scale,
+            verbose=True
         )
         
         self.task_description = None
