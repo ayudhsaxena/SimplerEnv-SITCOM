@@ -5,9 +5,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # Import the functions from the provided scripts
-from explore_attention_maps import get_attention_heatmap
-from grounded_sam_2 import GroundedSAM2
-from obj_specific_heatmap import get_object_affordance_heatmap
+from .explore_attention_maps import get_attention_heatmap
+from .grounded_sam_2 import GroundedSAM2
+from .obj_specific_heatmap import get_object_affordance_heatmap
 
 def calculate_weighted_affordance_centroid(affordance_heatmap):
     """

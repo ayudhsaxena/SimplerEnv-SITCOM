@@ -32,4 +32,4 @@ results/
 openvla_finetuned
 results-sitcom
 
-reward_scripts/outputs
+simpler_env/reward_scripts/outputs

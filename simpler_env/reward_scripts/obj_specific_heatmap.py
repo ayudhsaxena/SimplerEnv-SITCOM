@@ -6,8 +6,8 @@ from pathlib import Path
 
 # Import the functions from the provided scripts
 # Assuming these are importable modules in your project
-from explore_attention_maps import get_attention_heatmap
-from grounded_sam_2 import GroundedSAM2
+from .explore_attention_maps import get_attention_heatmap
+from .grounded_sam_2 import GroundedSAM2
 
 def get_object_affordance_heatmap(
     img_path,
