@@ -1,6 +1,6 @@
 import os
 import uuid
-
+import torch
 from dynamics_model import DynamicsModelTrainer, DynamicsModel
 
 laq = DynamicsModel(
@@ -12,10 +12,14 @@ laq = DynamicsModel(
     heads=16,
     use_lpips_loss=True,
 )
+pretrain_ckpt = "results/dyna1_bridge_4f4c35d2/vae.pt"
+ckpt = torch.load(pretrain_ckpt, map_location="cpu")["model"]
+msg = laq.load_state_dict(ckpt)
+print(msg)
 
 save_folder = "results/"
-run_name = "dyna1_bridge"
-run_id = "4f4c35d2"
+run_name = "dyna1_simpl_ft"
+run_id = "1"
 results_folder = os.path.join(save_folder, run_name + "_" + run_id)
 # results_folder = os.path.join(save_folder, run_name)
 
@@ -35,16 +39,16 @@ if os.path.exists(ckpt_path):
 
 trainer = DynamicsModelTrainer(
     laq,
-    folder=["bridge"],
-    batch_size=120,
+    folder=["simpler"],
+    batch_size=64,
     grad_accum_every=1,
     use_ema=False,
-    num_train_steps=250000,
+    num_train_steps=5001,
     results_folder=results_folder,
-    lr=1e-4,
+    lr=1e-5,
     save_model_every=1000,
-    save_milestone_every=15000,
-    save_results_every=5000,
+    save_milestone_every=1000,
+    save_results_every=500,
     accelerate_kwargs=dict(log_with="wandb"),
     resume_checkpoint=ckpt_path if os.path.exists(ckpt_path) else None,
     wandb_kwargs=wandb_kwargs,
