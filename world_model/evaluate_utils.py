@@ -12,7 +12,7 @@ class OpticalFlowEvaluator(nn.Module):
     Evaluator that calculates optical flow loss between predicted and ground truth images,
     and FID score.
     """
-    def __init__(self, device='cuda', flow_model=None, image_size=(520, 960), fid_feature_dim=2048):
+    def __init__(self, device='cuda', flow_model=None, image_size=(3, 224, 224), fid_feature_dim=2048):
         """
         Initialize the evaluator with RAFT model and FID calculator.
         
@@ -33,14 +33,14 @@ class OpticalFlowEvaluator(nn.Module):
         self.flow_model.eval()
         
         # Image preprocessing transforms
-        self.preprocess = Compose([
-            ConvertImageDtype(torch.float32),
-            Normalize(mean=0.5, std=0.5),  # Map [0, 1] into [-1, 1]
-            Resize(size=image_size),
-        ])
+        # self.preprocess = Compose([
+        #     ConvertImageDtype(torch.float32),
+        #     Normalize(mean=0.5, std=0.5),  # Map [0, 1] into [-1, 1]
+        #     Resize(size=image_size),
+        # ])
         
         # FID calculator
-        self.fid_calculator = fid.FrechetInceptionDistance(feature=fid_feature_dim).to(device)
+        self.fid_calculator = fid.FrechetInceptionDistance(feature=fid_feature_dim, input_img_size=image_size).to(device)
     
     def preprocess_images(self, images):
         """
@@ -52,7 +52,9 @@ class OpticalFlowEvaluator(nn.Module):
         Returns:
             torch.Tensor: Preprocessed images
         """
-        return self.preprocess(images).to(self.device)
+        image = 2 * (images - 0.5)  # Map [0, 1] to [-1, 1]
+        image = image.clamp(-1, 1)
+        return image
     
     def compute_optical_flow(self, img1, img2):
         """
@@ -82,7 +84,7 @@ class OpticalFlowEvaluator(nn.Module):
         Returns:
             torch.Tensor: RMSE loss
         """
-        return torch.sqrt(torch.mean((pred_flow - gt_flow) ** 2))
+        return torch.mean((pred_flow - gt_flow).pow(2).sum(dim=1), dim=(1, 2)).sqrt().mean()
     
     def compute_fid(self, pred_images, gt_images):
         """
@@ -96,17 +98,11 @@ class OpticalFlowEvaluator(nn.Module):
             float: FID score
         """
         # Reset FID calculator
-        self.fid_calculator.reset()
+        # self.fid_calculator.reset()
         
-        # Scale images to [0, 1] if they are in [-1, 1]
-        if pred_images.min() < 0:
-            pred_images = (pred_images + 1) / 2
-        if gt_images.min() < 0:
-            gt_images = (gt_images + 1) / 2
-            
         # Convert to uint8 [0, 255] for FID calculation
-        pred_images_uint8 = (pred_images * 255).to(torch.uint8).to(self.device)
-        gt_images_uint8 = (gt_images * 255).to(torch.uint8).to(self.device)
+        pred_images_uint8 = (pred_images.clamp(0, 1) * 255).to(torch.uint8).to(self.device)
+        gt_images_uint8 = (gt_images.clamp(0, 1) * 255).to(torch.uint8).to(self.device)
         
         # Update FID calculator
         self.fid_calculator.update(pred_images_uint8, real=False)
