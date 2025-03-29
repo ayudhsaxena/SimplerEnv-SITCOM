@@ -97,8 +97,6 @@ class OpticalFlowEvaluator(nn.Module):
         Returns:
             float: FID score
         """
-        # Reset FID calculator
-        # self.fid_calculator.reset()
         
         # Convert to uint8 [0, 255] for FID calculation
         pred_images_uint8 = (pred_images.clamp(0, 1) * 255).to(torch.uint8).to(self.device)

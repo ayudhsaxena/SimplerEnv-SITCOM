@@ -16,17 +16,20 @@ from dynamics_model import DynamicsModel
 from dynamics_model.data import DynamicsModelDataset
 from evaluate_utils import * 
 from torchvision import transforms as T
+from PIL import Image
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class TrajectoryDataset(Dataset):
-    def __init__(self, json_path: str, root_dir: str, future_frames: int = 5):
+    def __init__(self, json_path: str, root_dir: str, future_frames: int = 5, image_size : int = 224):
         """
         Args:
             json_path (str): Path to the JSON file with trajectory data
             root_dir (str): Directory where images are stored
             future_frames (int): Number of consecutive frames to include in each sample
         """
+        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        
         self.root_dir = root_dir
         self.future_frames = future_frames
         
@@ -96,16 +99,15 @@ class TrajectoryDataset(Dataset):
         for i, step in enumerate(trajectory_slice):
             # Load image and convert to tensor
             image_path = os.path.join(self.root_dir, step["image"])
-            image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-            # Convert to RGB and normalize to [0, 1]
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0
-            image_tensor = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1)  # [C, H, W]
-            frames.append(image_tensor)
+            img = Image.open(image_path)
+            img = self.transform(img)
+            frames.append(img)
             
             # Get action except for the last frame (as we need frames to predict actions)
             if i < len(trajectory_slice) - 1:
-                action = np.array(step["conversations"][1]["raw_actions"], dtype=np.float32)
-                actions.append(torch.tensor(action, dtype=torch.float32))
+                action = torch.tensor(step["conversations"][1]["raw_actions"], dtype=torch.float32).reshape(-1)
+                action = (action - self.action_mean) / self.action_std
+                actions.append(action)
         
         # Stack tensors
         frames_tensor = torch.stack(frames)
@@ -167,6 +169,12 @@ laq = DynamicsModel(
     heads=16,
     use_lpips_loss=True,
 )
+
+NUM_FUTURE_STEPS = 5
+val_dl = create_trajectory_dataloader(json_path= "/home/scratch/hshah2/aggregate_v3/simpler_v3.jsonl", root_dir= "/home/scratch/hshah2/aggregate_v3", future_frames=NUM_FUTURE_STEPS)
+
+breakpoint()
+
 pretrain_ckpt = "/home/jasonl6/sandeep/SimplerEnv-SITCOM/world_model/results/dyna1_simpl_ft_1/vae.pt"
 ckpt = torch.load(pretrain_ckpt, map_location="cpu")["model"]
 msg = laq.load_state_dict(ckpt)
@@ -174,66 +182,66 @@ print(msg)
 laq = laq.to(device)
 laq.eval()
 
-val_ds = DynamicsModelDataset(["simpler"], image_size=224, mode="val")
-val_dl = DataLoader(val_ds, batch_size=96, num_workers=4, shuffle=False)
-
-evaluator = OpticalFlowEvaluator(device=device, image_size=(3, 224, 224))
-batch_evaluator = BatchEvaluator(evaluator, device=device)
-total_of_loss = 0.0
-total_fid_sum = 0.0
+batch_evaluator = [BatchEvaluator(OpticalFlowEvaluator(device=device, image_size=(3, 224, 224)), device=device) for _ in range(NUM_FUTURE_STEPS-1)]
+total_of_loss = [0.0 for _ in range(NUM_FUTURE_STEPS-1)]
+total_fid_sum = [0.0 for _ in range(NUM_FUTURE_STEPS-1)]
 num_batches = 0
 
 for idx, val_sample in tqdm(enumerate(val_dl)):
-    valid_img, valid_action, valid_future_img = val_sample
-
-    valid_img, valid_action, valid_future_img = (
-        valid_img.to(device),
-        valid_action.to(device),
-        valid_future_img.to(device),
-    )
-
-    recons = laq(valid_img, valid_action, valid_future_img, return_recons_only=True)
-    # Evaluate dataloader
-        
-    # Move to device
-    base_batch = valid_img.to(device)
-    pred_batch = recons.to(device)
-    gt_batch = valid_future_img.to(device)
+    images = val_sample["frames"].to(device) # B x K x C x H x W
+    actions = val_sample["actions"].to(device) # B x (K-1) x A
+    future_iters = actions.shape[1]
+    curr_img_batch = images[:,0]
+    for i in range(1, future_iters):
+        gt_img_batch = images[:, i]
+        action_batch = actions[:, i-1]
+        recons_img_batch = laq(curr_img_batch, action_batch, gt_img_batch, return_recons_only=True)
+        batch_results = batch_evaluator[i-1].evaluate_batch(images[:, 0], recons_img_batch, gt_img_batch)
     
-    # Evaluate batch
-    batch_results = batch_evaluator.evaluate_batch(base_batch, pred_batch, gt_batch)
+        # Accumulate metrics
+        total_of_loss[i-1] += batch_results["optical_flow_loss"]
+        total_fid_sum[i-1] += batch_results["fid_score"]
     
-    # Accumulate metrics
-    total_of_loss += batch_results["optical_flow_loss"]
-    total_fid_sum += batch_results["fid_score"]
-    print(f'{idx}  {batch_results["fid_score"]}')
     num_batches += 1
     
 # Compute average metrics
-avg_of_loss = total_of_loss / num_batches
-avg_batch_fid = total_fid_sum / num_batches 
-
-print(f"avg_optical_flow_loss: {avg_of_loss}")
-print(f"Average Batch FID: {avg_batch_fid}")
+avg_of_loss = [elem / num_batches for elem in total_of_loss]
+avg_batch_fid = [elem / num_batches for elem in total_fid_sum] 
+global_fid = [elem.evaluator.fid_calculator.compute() for elem in batch_evaluator]
 print(f'Global FID: {batch_results["fid_score"]}')
 
-# Example usage:
-if __name__ == "__main__":
-    # Create dataloader with 5 future frames
-    dataloader = create_trajectory_dataloader(
-        json_path="simpler_v3.jsonl",
-        root_dir="ROOT_DIR",
-        future_frames=5,
-        batch_size=16
-    )
-    
-    # Example iteration
-    for batch in dataloader:
-        frames = batch['frames']  # [B, future_frames, C, H, W]
-        actions = batch['actions']  # [B, future_frames-1, action_dim]
-        
-        print(f"Frames shape: {frames.shape}")
-        print(f"Actions shape: {actions.shape}")
-        
-        # Here you would use these to train an autoregressive model
-        break
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+# Set Seaborn style for aesthetics
+sns.set_style("whitegrid")
+
+# Plot avg_of_loss and save
+plt.figure(figsize=(8, 5))
+plt.plot(avg_of_loss, marker='o', linestyle='-', color='royalblue', label='Avg Optical Loss')
+plt.xlabel("Epochs")
+plt.ylabel("Optical Loss")
+plt.title("Average Optical Loss Over Epochs")
+plt.legend()
+plt.savefig("avg_of_loss_plot.png", dpi=300)
+plt.close()
+
+# Plot avg_batch_fid and save
+plt.figure(figsize=(8, 5))
+plt.plot(avg_batch_fid, marker='s', linestyle='--', color='darkorange', label='Avg Batch FID')
+plt.xlabel("Epochs")
+plt.ylabel("Batch FID")
+plt.title("Average Batch FID Over Epochs")
+plt.legend()
+plt.savefig("avg_batch_fid_plot.png", dpi=300)
+plt.close()
+
+# Plot global_fid and save
+plt.figure(figsize=(8, 5))
+plt.plot(global_fid, marker='d', linestyle='-', color='green', label='Global FID')
+plt.xlabel("Epochs")
+plt.ylabel("Global FID")
+plt.title("Global FID Over Epochs")
+plt.legend()
+plt.savefig("global_fid_plot.png", dpi=300)
+plt.close()
