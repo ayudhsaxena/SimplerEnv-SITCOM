@@ -4,6 +4,8 @@ from dynamics_model import DynamicsModel
 from dynamics_model.data import DynamicsModelDataset
 from evaluate_utils import *
 
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 laq = DynamicsModel(
     dim=768,
