@@ -17,7 +17,6 @@ def get_sam2_from_cache(
     box_threshold,
     text_threshold,
     output_dir=None,
-    object_name='target',
 ):
     """
     Get a GroundedSAM2 instance from cache or create a new one if not found.
@@ -37,7 +36,7 @@ def get_sam2_from_cache(
     
     # Create a cache key based on the model parameters
     cache_key = (
-        f"{sam2_checkpoint}_{sam2_model_config}_{grounding_model}_{box_threshold}_{text_threshold}_{object_name}"
+        f"{sam2_checkpoint}_{sam2_model_config}_{grounding_model}_{box_threshold}_{text_threshold}"
     )
     
     # Check if we have this model in the cache

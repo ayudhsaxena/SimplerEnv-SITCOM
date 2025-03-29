@@ -93,7 +93,6 @@ def get_object_affordance_heatmap(
         box_threshold=box_threshold,
         text_threshold=text_threshold,
         output_dir=str(output_dir),
-        object_name=target_object
     )
     
     # 3. Process the image to get object mask
