@@ -96,7 +96,7 @@ if __name__ == "__main__":
             print(f"Getting reward function for {env_name}")
             
             if "PutCarrotOnPlateInScene" in env_name:
-                return reward_for_put_carrot_on_plate
+                return reward_for_put_carrot_on_plate_with_image
             elif "StackGreenOnYellowInScene" in env_name:
                 return reward_for_stack_green_on_yellow
             elif "PutEggplantInBasketInScene" in env_name:
@@ -106,7 +106,7 @@ if __name__ == "__main__":
             else:
                 # Default reward function
                 print(f"Unknown environment name: {env_name}. Using default reward function.")
-                return reward_for_put_carrot_on_plate
+                return reward_for_put_carrot_on_plate_with_image
 
             
         reward_function = get_reward_function(args.env_name)
@@ -129,7 +129,6 @@ if __name__ == "__main__":
         )
     else:
         raise NotImplementedError()
-    breakpoint()
     # run real-to-sim evaluation
     success_arr = maniskill2_evaluator(model, args)
     print(args)

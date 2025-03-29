@@ -23,7 +23,7 @@ def get_reward_function(env_name):
     print(f"Getting reward function for {env_name}")
     
     if "PutCarrotOnPlateInScene" in env_name:
-        return reward_for_put_carrot_on_plate
+        return reward_for_put_carrot_on_plate_with_image
     elif "StackGreenOnYellowInScene" in env_name:
         return reward_for_stack_green_on_yellow
     elif "PutEggplantInBasketInScene" in env_name:
@@ -133,7 +133,7 @@ def run_maniskill2_eval_single_episode(
     predicted_terminated, done, truncated = False, False, False
 
     # Initialize model
-    model.reset(task_description)
+    model.reset(task_description, episode_id = obj_episode_id)
 
     reward_function = get_reward_function(env_name)
     
@@ -169,9 +169,9 @@ def run_maniskill2_eval_single_episode(
         
         action_list.append(action)
         
-        # save observation to understand how close is the gripper after taking an actual step
-        reward_cal = reward_function(env)
-        print("Reward after taking step in original env: ", reward_cal)
+        # # save observation to understand how close is the gripper after taking an actual step
+        # reward_cal = reward_function(env)
+        # print("Reward after taking step in original env: ", reward_cal)
         
         # step the environment
         obs_, reward_, done_, truncated_, info_ = planning_env.step(

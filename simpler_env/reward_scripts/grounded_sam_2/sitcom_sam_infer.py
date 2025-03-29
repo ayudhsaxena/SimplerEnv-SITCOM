@@ -131,7 +131,6 @@ class GroundedSAM2:
         
         # Get bounding boxes from grounding model
         input_boxes = results[0]["boxes"].cpu().numpy()
-        
         # Get masks from SAM2
         masks, scores, logits = self.sam2_predictor.predict(
             point_coords=None,

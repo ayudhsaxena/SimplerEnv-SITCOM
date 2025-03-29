@@ -8,6 +8,7 @@ from pathlib import Path
 from .explore_attention_maps import get_attention_heatmap
 from .grounded_sam_2 import GroundedSAM2
 from .obj_specific_heatmap import get_object_affordance_heatmap
+from .model_cache import get_sam2_from_cache
 
 def calculate_weighted_affordance_centroid(affordance_heatmap):
     """
@@ -42,7 +43,7 @@ def calculate_affordance_metrics(
     img_path,
     target_object,
     gripper_name="gripper",
-    sam2_checkpoint="grounded_sam_2/checkpoints/sam2_hiera_large.pt",
+    sam2_checkpoint="/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/simpler_env/reward_scripts/grounded_sam_2/checkpoints/sam2_hiera_large.pt",
     sam2_model_config="sam2_hiera_l.yaml",
     grounding_model="IDEA-Research/grounding-dino-tiny",
     vit_model_name="VC1_hrp",
@@ -53,9 +54,10 @@ def calculate_affordance_metrics(
     threshold_percentile=90,
     img_size=224,
     patch_size=16,
-    output_dir="outputs/affordance_metrics",
+    output_dir="outputs/metrics",
     visualize=True,
-    use_weighted_centroid=True
+    use_weighted_centroid=True,
+    save_metrics=False
 ):
     """
     Calculate various metrics between a gripper and the affordance position for a target object.
@@ -79,6 +81,7 @@ def calculate_affordance_metrics(
         visualize (bool): Whether to save visualization of results.
         use_weighted_centroid (bool): Whether to use weighted centroid (True) or maximum value (False)
                                      for the affordance position.
+        save_metrics (bool): Whether to save metrics to disk.
         
     Returns:
         dict: Dictionary of metrics including:
@@ -87,13 +90,18 @@ def calculate_affordance_metrics(
             - 'affordance_value_at_gripper': Affordance value at the gripper position
             - 'max_affordance_value': Maximum affordance value in the heatmap
             - 'relative_affordance': Ratio of affordance at gripper to max affordance
+            - 'object_iou': IoU between object and its affordance map
+            - 'gripper_iou': IoU between gripper and its affordance map
     """
     # Setup output directory
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    ####
+    ##### OPtimize the double SAM calls, we can merge it into 1
+    ######
     # 1. Generate affordance heatmap for the target object
-    _, affordance_heatmap = get_object_affordance_heatmap(
+    _, target_affordance_heatmap = get_object_affordance_heatmap(
         img_path=img_path,
         target_object=target_object,
         sam2_checkpoint=sam2_checkpoint,
@@ -107,87 +115,109 @@ def calculate_affordance_metrics(
         threshold_percentile=threshold_percentile,
         img_size=img_size,
         patch_size=patch_size,
-        output_dir=output_dir,
-        visualize=visualize
+        output_dir=output_dir / "target_object",
+        visualize=visualize,
+        save_metrics=save_metrics
     )
     
-    # 2. Initialize GroundedSAM2 for gripper segmentation
-    grounded_sam2 = GroundedSAM2(
+
+    # 2. Generate affordance heatmap for the gripper
+    _, gripper_affordance_heatmap = get_object_affordance_heatmap(
+        img_path=img_path,
+        target_object=gripper_name,
         sam2_checkpoint=sam2_checkpoint,
         sam2_model_config=sam2_model_config,
         grounding_model=grounding_model,
+        vit_model_name=vit_model_name,
+        layer=layer,
+        head=head,
         box_threshold=box_threshold,
         text_threshold=text_threshold,
-        output_dir=str(output_dir)
+        threshold_percentile=threshold_percentile,
+        img_size=img_size,
+        patch_size=patch_size,
+        output_dir=output_dir / "gripper",
+        visualize=visualize,
+        save_metrics=save_metrics
     )
     
-    # 3. Process the image to get gripper mask
-    img_np, detections, class_names = grounded_sam2.process_image(img_path, gripper_name)
+    # 3. Load the original image to get dimensions
+    img = cv2.imread(img_path)
+    img_height, img_width = img.shape[:2]
     
-    # Find the index of the gripper
-    gripper_idx = grounded_sam2._find_object_mask_index(class_names, detections, gripper_name)
-    if gripper_idx == -1:
-        raise ValueError(f"Error: Could not find {gripper_name} in the image.")
+    # 4. Calculate centroid positions for both affordance maps
+    target_centroid = None
+    gripper_centroid = None
     
-    # Get the mask and calculate centroid for the gripper
-    gripper_mask = detections.mask[gripper_idx]
-    gripper_centroid = grounded_sam2._calculate_mask_centroid(gripper_mask)
-    
-    # 4. Find the optimal affordance position
     # Handle 3D heatmap if needed
-    if len(affordance_heatmap.shape) == 3:
-        # Convert to grayscale by taking the mean across channels
-        affordance_heatmap_2d = np.mean(affordance_heatmap, axis=2)
+    if len(target_affordance_heatmap.shape) == 3:
+        target_affordance_heatmap_2d = np.mean(target_affordance_heatmap, axis=2)
     else:
-        affordance_heatmap_2d = affordance_heatmap
+        target_affordance_heatmap_2d = target_affordance_heatmap
         
-    if use_weighted_centroid:
-        # Calculate weighted centroid of affordance heatmap
-        affordance_position = calculate_weighted_affordance_centroid(affordance_heatmap)
+    if len(gripper_affordance_heatmap.shape) == 3:
+        gripper_affordance_heatmap_2d = np.mean(gripper_affordance_heatmap, axis=2)
     else:
-        # Find position with maximum affordance value
-        y_max, x_max = np.unravel_index(np.argmax(affordance_heatmap_2d), affordance_heatmap_2d.shape)
-        affordance_position = (x_max, y_max)
+        gripper_affordance_heatmap_2d = gripper_affordance_heatmap
     
-    # 5. Scale the affordance position to the original image dimensions
-    img_height, img_width = img_np.shape[:2]
+    # Calculate centroids based on method (weighted or max)
+    if use_weighted_centroid:
+        # Calculate weighted centroid for target
+        target_centroid = calculate_weighted_affordance_centroid(target_affordance_heatmap_2d)
+        # Calculate weighted centroid for gripper
+        gripper_centroid = calculate_weighted_affordance_centroid(gripper_affordance_heatmap_2d)
+    else:
+        # Find position with maximum affordance value for target
+        y_max, x_max = np.unravel_index(np.argmax(target_affordance_heatmap_2d), target_affordance_heatmap_2d.shape)
+        target_centroid = (x_max, y_max)
+        
+        # Find position with maximum affordance value for gripper
+        y_max, x_max = np.unravel_index(np.argmax(gripper_affordance_heatmap_2d), gripper_affordance_heatmap_2d.shape)
+        gripper_centroid = (x_max, y_max)
+    
+    # 5. Scale centroids to original image dimensions
     scale_factor_x = img_width / img_size
     scale_factor_y = img_height / img_size
     
-    affordance_position_scaled = (
-        int(affordance_position[0] * scale_factor_x),
-        int(affordance_position[1] * scale_factor_y)
+    target_centroid_scaled = (
+        int(target_centroid[0] * scale_factor_x),
+        int(target_centroid[1] * scale_factor_y)
     )
     
-    # 6. Calculate the Euclidean distance between gripper centroid and optimal affordance position
+    gripper_centroid_scaled = (
+        int(gripper_centroid[0] * scale_factor_x),
+        int(gripper_centroid[1] * scale_factor_y)
+    )
+    
+    # 6. Calculate the Euclidean distance between centroids
     euclidean_distance = np.sqrt(
-        (gripper_centroid[0] - affordance_position_scaled[0])**2 + 
-        (gripper_centroid[1] - affordance_position_scaled[1])**2
+        (gripper_centroid_scaled[0] - target_centroid_scaled[0])**2 + 
+        (gripper_centroid_scaled[1] - target_centroid_scaled[1])**2
     )
     
-    # 7. Calculate the image diagonal for normalization
+    # 7. Calculate normalized distance
     img_diagonal = np.sqrt(img_height**2 + img_width**2)
     normalized_distance = euclidean_distance / img_diagonal
     
-    # 8. Scale gripper centroid to heatmap size
-    scaled_gripper_x = int(gripper_centroid[0] * img_size / img_width)
-    scaled_gripper_y = int(gripper_centroid[1] * img_size / img_height)
+    # 8. Calculate affordance value at the gripper position in the target's affordance map
+    # First convert to heatmap coordinates
+    scaled_gripper_x = int(gripper_centroid_scaled[0] / scale_factor_x)
+    scaled_gripper_y = int(gripper_centroid_scaled[1] / scale_factor_y)
     
     # Ensure coordinates are within bounds
     scaled_gripper_x = max(0, min(scaled_gripper_x, img_size - 1))
     scaled_gripper_y = max(0, min(scaled_gripper_y, img_size - 1))
     
-    # 9. Get affordance value at gripper position
-    if len(affordance_heatmap.shape) == 3:
-        # If 3D, take the mean across color channels
-        affordance_at_gripper = np.mean(affordance_heatmap[scaled_gripper_y, scaled_gripper_x, :])
+    # Get affordance value at gripper position in target's affordance map
+    if len(target_affordance_heatmap.shape) == 3:
+        affordance_at_gripper = np.mean(target_affordance_heatmap[scaled_gripper_y, scaled_gripper_x, :])
     else:
-        affordance_at_gripper = affordance_heatmap[scaled_gripper_y, scaled_gripper_x]
+        affordance_at_gripper = target_affordance_heatmap[scaled_gripper_y, scaled_gripper_x]
     
-    # 10. Get maximum affordance value
-    max_affordance = np.max(affordance_heatmap_2d)
+    # 9. Get maximum affordance value in target's map
+    max_affordance = np.max(target_affordance_heatmap_2d)
     
-    # 11. Calculate relative affordance (ratio of affordance at gripper to max affordance)
+    # 10. Calculate relative affordance (ratio of affordance at gripper to max affordance)
     relative_affordance = affordance_at_gripper / max_affordance if max_affordance > 0 else 0
     
     # Prepare metrics dictionary
@@ -196,10 +226,12 @@ def calculate_affordance_metrics(
         'normalized_distance': normalized_distance,
         'affordance_value_at_gripper': affordance_at_gripper,
         'max_affordance_value': max_affordance,
-        'relative_affordance': relative_affordance
+        'relative_affordance': relative_affordance,
+        'target_affordance_position': target_centroid_scaled,
+        'gripper_affordance_position': gripper_centroid_scaled,
     }
     
-    # 12. Create visualizations if requested
+    # 11. Create visualizations if requested
     if visualize:
         # Load original image
         img = cv2.imread(img_path)
@@ -207,24 +239,23 @@ def calculate_affordance_metrics(
         # Create visualization of distance
         img_vis = img.copy()
         
-        # Draw gripper centroid
-        gripper_centroid_int = (int(gripper_centroid[0]), int(gripper_centroid[1]))
-        cv2.circle(img_vis, gripper_centroid_int, 5, (0, 0, 255), -1)  # Red circle
-        cv2.putText(img_vis, "Gripper", (gripper_centroid_int[0] + 10, gripper_centroid_int[1]), 
+        # Draw gripper affordance centroid
+        cv2.circle(img_vis, gripper_centroid_scaled, 5, (0, 0, 255), -1)  # Red circle
+        cv2.putText(img_vis, "Gripper", (gripper_centroid_scaled[0] + 10, gripper_centroid_scaled[1]), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
         
-        # Draw optimal affordance position
-        cv2.circle(img_vis, affordance_position_scaled, 5, (0, 255, 0), -1)  # Green circle
-        cv2.putText(img_vis, "Affordance", (affordance_position_scaled[0] + 10, affordance_position_scaled[1]), 
+        # Draw target affordance position
+        cv2.circle(img_vis, target_centroid_scaled, 5, (0, 255, 0), -1)  # Green circle
+        cv2.putText(img_vis, f"{target_object} Affordance", (target_centroid_scaled[0] + 10, target_centroid_scaled[1]), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         
         # Draw line between the two points
-        cv2.line(img_vis, gripper_centroid_int, affordance_position_scaled, (255, 0, 0), 2)  # Blue line
+        cv2.line(img_vis, gripper_centroid_scaled, target_centroid_scaled, (255, 0, 0), 2)  # Blue line
         
         # Put distance text
         midpoint = (
-            (gripper_centroid_int[0] + affordance_position_scaled[0]) // 2,
-            (gripper_centroid_int[1] + affordance_position_scaled[1]) // 2
+            (gripper_centroid_scaled[0] + target_centroid_scaled[0]) // 2,
+            (gripper_centroid_scaled[1] + target_centroid_scaled[1]) // 2
         )
         cv2.putText(img_vis, f"Distance: {euclidean_distance:.2f} px", midpoint, 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
@@ -235,45 +266,79 @@ def calculate_affordance_metrics(
         # Add metric text at the top of the image
         y_offset = 30
         for i, (metric_name, metric_value) in enumerate(metrics.items()):
-            cv2.putText(img_metrics, f"{metric_name}: {metric_value:.4f}", 
+            if isinstance(metric_value, tuple):
+                text = f"{metric_name}: ({metric_value[0]:.4f}, {metric_value[1]:.4f})"
+            else:
+                text = f"{metric_name}: {metric_value:.4f}"
+            cv2.putText(img_metrics, text, 
                        (10, y_offset + i*30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-        # Create visualization with heatmap overlay
-        # First, create a colored heatmap from the 2D version
-        heatmap_uint8 = (affordance_heatmap_2d * 255).astype(np.uint8)
-        colored_heatmap = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
-        colored_heatmap_resized = cv2.resize(colored_heatmap, (img_width, img_height))
+        # Create combined visualization with both heatmaps
+        # Resize both heatmaps to original image size
+        target_heatmap_resized = cv2.resize(target_affordance_heatmap_2d, (img_width, img_height))
+        gripper_heatmap_resized = cv2.resize(gripper_affordance_heatmap_2d, (img_width, img_height))
         
-        # Create a mask for the non-zero parts of the heatmap
-        non_zero_mask = (affordance_heatmap_2d > 0).astype(np.uint8)
-        non_zero_mask_resized = cv2.resize(non_zero_mask, (img_width, img_height), 
-                                         interpolation=cv2.INTER_NEAREST)
-        non_zero_mask_3channel = cv2.merge([non_zero_mask_resized, non_zero_mask_resized, non_zero_mask_resized])
+        # Create colored versions
+        target_heatmap_color = cv2.applyColorMap((target_heatmap_resized * 255).astype(np.uint8), cv2.COLORMAP_JET)
+        gripper_heatmap_color = cv2.applyColorMap((gripper_heatmap_resized * 255).astype(np.uint8), cv2.COLORMAP_WINTER)
         
-        # Blend the heatmap with the original image
-        img_with_heatmap = img.copy()
-        blend_factor = 0.3
-        img_with_heatmap[non_zero_mask_3channel.astype(bool)] = (
-            img[non_zero_mask_3channel.astype(bool)] * (1 - blend_factor) + 
-            colored_heatmap_resized[non_zero_mask_3channel.astype(bool)] * blend_factor
-        )
+        # Create mask for non-zero areas
+        target_mask = target_heatmap_resized > 0
+        gripper_mask = gripper_heatmap_resized > 0
         
-        # Add the distance line and points to the heatmap visualization
-        cv2.circle(img_with_heatmap, gripper_centroid_int, 5, (0, 0, 255), -1)  # Red circle
-        cv2.circle(img_with_heatmap, affordance_position_scaled, 5, (0, 255, 0), -1)  # Green circle
-        cv2.line(img_with_heatmap, gripper_centroid_int, affordance_position_scaled, (255, 0, 0), 2)  # Blue line
+        # Combine heatmaps with image
+        combined_img = img.copy()
+        alpha = 0.3
+        
+        # Add target heatmap
+        combined_img[target_mask] = cv2.addWeighted(
+            combined_img[target_mask], 1-alpha, 
+            target_heatmap_color[target_mask], alpha, 0)
+        
+        # Add gripper heatmap using a different color scheme
+        combined_img[gripper_mask] = cv2.addWeighted(
+            combined_img[gripper_mask], 1-alpha, 
+            gripper_heatmap_color[gripper_mask], alpha, 0)
+        
+        # Add centroids and distance line
+        cv2.circle(combined_img, gripper_centroid_scaled, 5, (0, 0, 255), -1)  # Red circle
+        cv2.circle(combined_img, target_centroid_scaled, 5, (0, 255, 0), -1)  # Green circle
+        cv2.line(combined_img, gripper_centroid_scaled, target_centroid_scaled, (255, 255, 255), 2)  # White line
         
         # Save all visualizations
-        vis_path = str(output_dir / f"affordance_distance_{Path(img_path).stem}.png")
+        vis_path = str(output_dir / f"dual_affordance_distance_{Path(img_path).stem}.png")
         cv2.imwrite(vis_path, img_vis)
         
-        metrics_vis_path = str(output_dir / f"affordance_metrics_{Path(img_path).stem}.png")
+        metrics_vis_path = str(output_dir / f"dual_affordance_metrics_{Path(img_path).stem}.png")
         cv2.imwrite(metrics_vis_path, img_metrics)
         
-        heatmap_vis_path = str(output_dir / f"affordance_heatmap_{Path(img_path).stem}.png")
-        cv2.imwrite(heatmap_vis_path, img_with_heatmap)
+        combined_vis_path = str(output_dir / f"dual_affordance_heatmaps_{Path(img_path).stem}.png")
+        cv2.imwrite(combined_vis_path, combined_img)
         
-        print(f"Visualizations saved to {output_dir}")
+        print(f"Dual affordance visualizations saved to {output_dir}")
+    
+    # Save metrics to disk if requested
+    if save_metrics:
+       
+        
+        # Create a filename for the metrics
+        metrics_filename = f"distance_metrics_{target_object}_{gripper_name}_{Path(img_path).stem}.npz"
+        metrics_path = output_dir / metrics_filename
+        
+        # Convert dictionary metrics to format compatible with np.savez
+        saveable_metrics = {}
+        for key, value in metrics.items():
+            if isinstance(value, tuple):
+                # Convert tuples to numpy arrays
+                saveable_metrics[key] = np.array(value)
+            else:
+                saveable_metrics[key] = value
+        
+        # Save metrics as NumPy compressed array
+        np.savez(metrics_path, **saveable_metrics)
+        
+        if visualize:
+            print(f"Distance metrics saved to {metrics_path}")
     
     return metrics
 
@@ -302,7 +367,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sam2_checkpoint",
         type=str,
-        default="grounded_sam_2/checkpoints/sam2_hiera_large.pt",
+        default="/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/simpler_env/reward_scripts/grounded_sam_2/checkpoints/sam2_hiera_large.pt",
         help="Path to the SAM2 model checkpoint"
     )
     parser.add_argument(
@@ -311,6 +376,7 @@ if __name__ == "__main__":
         default="sam2_hiera_l.yaml",
         help="SAM2 model configuration file"
     )
+    
     parser.add_argument(
         "--vit_model_name",
         type=str,

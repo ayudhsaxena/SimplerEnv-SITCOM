@@ -5,6 +5,15 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Any, Optional, Union
 from simpler_env.policies.sitcom.simulation_node import SimulationNode
 from simpler_env.policies.openvla.openvla_model import OpenVLAInference
+from simpler_env.reward_scripts import calculate_affordance_metrics
+import os
+import datetime
+import tempfile
+import cv2
+import uuid
+import json
+import pathlib
+
 
 from simpler_env.utils.env.env_builder import (
     build_maniskill2_env,
@@ -57,7 +66,7 @@ class TwoSimulatorPlanner:
             unnorm_key='simpler_rlds',
         )
         
-        
+        print("HERE")
         # Set up reward function or use default
         if reward_function is None:
             self.reward_function = self._default_reward_function
@@ -79,6 +88,7 @@ class TwoSimulatorPlanner:
         
         # Task description
         self.task_description = None
+        self.episode_id = -1
         
         # Reset internal state
         self.reset()
@@ -135,7 +145,7 @@ class TwoSimulatorPlanner:
             # If we can't compute the reward, return a default value
             return 0.0
     
-    def reset(self, task_description=None):
+    def reset(self, task_description=None, episode_id=None):
         """
         Reset the planner.
         
@@ -145,7 +155,10 @@ class TwoSimulatorPlanner:
         self.simulation_tree = None
         self.best_trajectory = None
         self.best_reward = float('-inf')
-        
+        if episode_id is not None:
+            self.episode_id = episode_id
+        else :
+            self.episode_id = -1
         if task_description is not None:
             self.task_description = task_description
             self.model.reset(task_description)
@@ -280,25 +293,39 @@ class TwoSimulatorPlanner:
             print(f"  - Done: {done}")
             if done:
                 print(f"  - Task completed in simulation!")
-        
+
         # Extract the image from the observation
         image = get_image_from_maniskill2_obs_dict(state, obs)
+
         
         return state, reward, image, done
     
-    def compute_reward(self, state, action=None):
+    def compute_reward(self, state, image=None, action=None, trajectory_images=None, most_recent_reward=-1):
         """
         Compute reward for a state-action pair.
         
         Args:
             state: The current state
+            image: The current image (optional)
             action: The action (optional)
+            rewards_history: List of rewards from previous best trajectories (optional)
             
         Returns:
             reward: The computed reward
         """
-        return self.reward_function(state, action)
-    
+        # Pass rewards_history to the reward function if it accepts it
+        import inspect
+        
+        # Check if the reward function accepts a rewards_history parameter
+        reward_function_params = inspect.signature(self.reward_function).parameters
+        
+        if 'trajectory_images' in reward_function_params:
+            return self.reward_function(state, trajectory_images=trajectory_images)
+        elif 'image' in reward_function_params:
+            return self.reward_function(state, image)
+        else:
+            return self.reward_function(state, action)
+        
     def select_best_actions(self, state, candidate_actions, num_best, kwargs, additional_env_build_kwargs):
         """
         Select the best actions based on the reward function.
@@ -618,26 +645,33 @@ class TwoSimulatorPlanner:
         
         return best_action
     
-    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5, rewards_history=None):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
         Args:
-            env: The current environment state (first simulator)
+            env_name: The environment name
+            action_list: List of actions taken so far
+            env_reset_options: Options for environment reset
             image: The current image observation
             task_description: Optional updated task description
             kwargs: Additional arguments for environment building
             additional_env_build_kwargs: Additional environment building arguments
             trajectory_length: The number of actions to include in each trajectory
             num_trajectories: Number of different trajectories to evaluate
+            rewards_history: List of rewards from previous best trajectories
             
         Returns:
-            best_trajectory: List of actions forming the best trajectory
+            tuple: (best_trajectory, best_final_reward)
+                - best_trajectory: List of actions forming the best trajectory
+                - best_final_reward: The reward achieved by the best trajectory
         """
         if self.verbose:
             print("\n" + "="*80)
             print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
             print(f"[TwoSimulatorPlanner] Evaluating {num_trajectories} trajectories of length {trajectory_length}")
+            if rewards_history:
+                print(f"[TwoSimulatorPlanner] Using rewards history: {rewards_history}")
             print("="*80)
         
         # Update task description if provided
@@ -653,8 +687,12 @@ class TwoSimulatorPlanner:
         
         # Track best trajectory and its final reward
         best_trajectory = None
-        best_final_reward = float('-inf')
-        
+        best_metrics = {
+            'reward': float('-inf'),
+        }
+        most_recent_metric = {'reward': -1}
+        if len(rewards_history) > 0:
+            most_recent_metric = copy.deepcopy(rewards_history[-1])
         # Generate and evaluate multiple trajectories
         for traj_idx in range(num_trajectories):
             if self.verbose:
@@ -662,11 +700,10 @@ class TwoSimulatorPlanner:
             
             # Initialize trajectory for this run
             trajectory_actions = []
-            current_env = self.get_to_state(env_name, action_list,env_reset_options, kwargs, additional_env_build_kwargs)
-            # current_env = self.copy_state(env_name, kwargs, additional_env_build_kwargs)
-            # current_env = 
+            current_env = self.get_to_state(env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs)
             current_image = image
             
+            trajectory_images = []
             # Generate a sequence of actions for this trajectory
             for step in range(trajectory_length):
                 if self.verbose:
@@ -676,7 +713,7 @@ class TwoSimulatorPlanner:
                 actions = self.sample_actions_from_model(
                     current_image, 
                     self.task_description, 
-                    num_samples=1,  # Just sample one action at a time for the trajectory
+                    num_samples=1,
                     temperature=self.temperature
                 )
                 
@@ -692,54 +729,130 @@ class TwoSimulatorPlanner:
                 current_env, reward, current_image, done = self.simulate_action(
                     current_env, action, kwargs, additional_env_build_kwargs
                 )
+                trajectory_images.append(current_image)
                 
-                computed_reward = self.compute_reward(current_env)
-                # print(f"  - Simulated step reward: {computed_reward}")
-    
+                # # Use compute_reward instead of the direct reward from simulate_action
+                # # Pass the rewards_history to the reward function
+                # computed_reward = self.compute_reward(current_env, current_image, action, rewards_history)
                 
-                if self.verbose:
-                    print(f"  - Simulated step reward: {reward}")
+                # if self.verbose:
+                #     print(f"  - Simulated step reward: {computed_reward}")
                 
                 # If task is done, we can stop this trajectory
                 if done:
                     if self.verbose:
                         print(f"  - Task completed after {step+1} steps")
                     break
-            
             # Compute final reward for this trajectory
-            final_reward = self.compute_reward(current_env)
-            
+            metrics = self.compute_reward(current_env, trajectory_images=trajectory_images)
+            if metrics is None :
+                metrics = most_recent_metric
+            final_reward = metrics['reward']
+            metrics['image'] = current_image
+
             if self.verbose:
                 print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
             
-            # print reward for the trajectory
             print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
+            
             # Update best trajectory if this one is better
-            if final_reward > best_final_reward:
-                best_final_reward = final_reward
+            if final_reward > best_metrics['reward']:
                 best_trajectory = trajectory_actions
-                
+                best_metrics = metrics
                 if self.verbose:
                     print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
-        print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+        print(f"Best trajectory has {len(best_trajectory or [])} actions with final reward: {best_metrics['reward']}")
+        self.save_metrics_metrics_for_best_trajectory(best_metrics)
         # Calculate planning time
         planning_time = time.time() - start_time
         
         if self.verbose:
             print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")
-            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory or [])} actions with final reward: {best_metrics['reward']}")
             print("="*80 + "\n")
         
-        return best_trajectory or []  # Return empty list if no trajectory was found
+        return best_trajectory or [], best_metrics  # Return empty list if no trajectory was found, plus the best reward
     
-    
+    def save_metrics_metrics_for_best_trajectory(self,metrics):
+        image = metrics['image']
+        if image is None:
+            print("Image cant be none")
+            return 
+        
+        # Create a temporary file to save the image
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+            # Convert RGB to BGR for cv2.imwrite
+            if image.ndim == 3 and image.shape[2] == 3:
+                image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            else:
+                image_bgr = image
+            cv2.imwrite(tmp_path, image_bgr)
+        # Create output directory for visualizations
+        output_base_dir = f"/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/outputs/affordance_visualizations/{self.episode_id}"
+        os.makedirs(output_base_dir, exist_ok=True)
+
+        # Generate unique identifiers
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Create output directories for target objects
+        carrot_output_dir = os.path.join(output_base_dir, f"carrot_{timestamp}_{pathlib.Path(tmp_path).stem}")
+        os.makedirs(carrot_output_dir, exist_ok=True)
+        try:
+            _ = calculate_affordance_metrics(
+                img_path=tmp_path,
+                target_object="carrot",
+                gripper_name="gripper",
+                visualize=True,
+                save_metrics=True,
+                output_dir=carrot_output_dir,
+            )
+            # Save metrics to JSON file
+            metrics_output_path = os.path.join(carrot_output_dir, "metrics.json")
+
+            # Function to convert numpy types and other non-serializable objects to Python native types
+            def convert_for_json(obj):
+                if isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, tuple):
+                    return list(obj)
+                elif hasattr(obj, 'tolist'):  # Handle other numpy types with tolist method
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {k: convert_for_json(v) for k, v in obj.items() if k != 'image'}
+                elif isinstance(obj, list):
+                    return [convert_for_json(item) for item in obj]
+                else:
+                    return obj
+
+            # Convert metrics to JSON serializable format (exclude the image)
+            serializable_metrics = {k: convert_for_json(v) for k, v in metrics.items() if k != 'image'}
+
+            # Save to JSON file
+            with open(metrics_output_path, 'w') as f:
+                json.dump(serializable_metrics, f, indent=2)
+
+            print(f"Saved metrics to {metrics_output_path}")
+        except Exception as e:
+            print(f"Error saving metrics {metrics}: {e}")
+        finally:
+            # Clean up the temporary file
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+
     def debug_trajectory_planning(self, env, image, task_description, kwargs, additional_env_build_kwargs, dummy):
         """
         Debug method to test if environment copying and simulation work correctly
         by testing two predefined trajectories.
         """
         import numpy as np
+        
         
         if self.verbose:
             print("\n" + "="*80)

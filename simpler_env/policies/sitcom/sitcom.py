@@ -24,6 +24,7 @@ class SITCOMInference:
         policy_setup: str = "widowx_bridge",
         action_scale: float = 1.0,
         trajectory_length: int = 10,  # New parameter for trajectory length
+        max_history_size: int = 10,  # Maximum number of trajectory rewards to store
     ):
         """
         Initialize the wrapper for the planning model.
@@ -42,6 +43,7 @@ class SITCOMInference:
             policy_setup: Policy setup for the OpenVLA model
             action_scale: Scaling factor for actions
             trajectory_length: Length of trajectory to request from planner
+            max_history_size: Maximum number of trajectory rewards to store
         """
         # Create the planner
         self.planner = TwoSimulatorPlanner(
@@ -58,14 +60,18 @@ class SITCOMInference:
             logging_dir=logging_dir,
             policy_setup=policy_setup,
             action_scale=action_scale,
-            verbose=True
+            verbose=False
         )
         
         self.task_description = None
         self.action_buffer = deque()  # Buffer to store trajectory actions
         self.trajectory_length = trajectory_length
+        
+        # New: Track the rewards history for best trajectories
+        self.trajectory_rewards_history = []
+        self.max_history_size = max_history_size
     
-    def reset(self, task_description: str) -> None:
+    def reset(self, task_description: str, episode_id: int) -> None:
         """
         Reset the model with a new task description.
         
@@ -73,8 +79,9 @@ class SITCOMInference:
             task_description: The task description
         """
         self.task_description = task_description
-        self.planner.reset(task_description)
+        self.planner.reset(task_description, episode_id = episode_id)
         self.action_buffer.clear()  # Clear the action buffer on reset
+        self.trajectory_rewards_history = []  # Clear rewards history on reset
     
     def step(self, image, task_description, current_env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs):
         """
@@ -83,7 +90,11 @@ class SITCOMInference:
         Args:
             image: The current image observation
             task_description: The task description
-            current_env: The current environment (first simulator)
+            current_env_name: The current environment name
+            action_list: List of actions taken so far
+            env_reset_options: Options for environment reset
+            kwargs: Additional arguments
+            additional_env_build_kwargs: Additional environment build arguments
             
         Returns:
             raw_action: The raw action from the model
@@ -94,11 +105,12 @@ class SITCOMInference:
             self.task_description = task_description
             self.planner.reset(task_description)
             self.action_buffer.clear()  # Clear buffer when task changes
+            self.trajectory_rewards_history = []  # Clear rewards history when task changes
         
         # Check if buffer is empty
         if not self.action_buffer:
             # Get a new trajectory from the planner
-            trajectory = self.planner.plan_trajectory(
+            trajectory, best_metrics = self.planner.plan_trajectory(
                 current_env_name,
                 action_list,
                 env_reset_options,
@@ -106,9 +118,26 @@ class SITCOMInference:
                 task_description, 
                 kwargs, 
                 additional_env_build_kwargs,
-                self.trajectory_length
+                self.trajectory_length,
+                rewards_history=self.trajectory_rewards_history  # Pass the rewards history
             )
             
+            # Update rewards history with the best reward from this planning cycle
+            self.trajectory_rewards_history.append(best_metrics)
+            # Extract carrot positions from history
+            carrot_positions = [entry.get('carrot_position', None) for entry in self.trajectory_rewards_history]
+            carrot_positions = [pos for pos in carrot_positions if pos is not None]
+            
+            if carrot_positions:
+                # Calculate variance of carrot positions
+                positions_array = np.array(carrot_positions)
+                print("Best trajectory history stats so far:")
+                print(f"Carrot positions: {carrot_positions}")
+                print("="*50)
+            # Maintain a fixed-size history by removing oldest entries if needed
+            if len(self.trajectory_rewards_history) > self.max_history_size:
+                self.trajectory_rewards_history = self.trajectory_rewards_history[-self.max_history_size:]
+                            
             # Fill the buffer with the trajectory actions
             for action in trajectory:
                 self.action_buffer.append(action)
@@ -118,7 +147,13 @@ class SITCOMInference:
         
         # If buffer was empty and planner couldn't provide a trajectory, fall back to single action planning
         if best_action is None:
-            best_action = self.planner.plan(current_env, image, task_description, kwargs, additional_env_build_kwargs)
+            best_action = self.planner.plan(
+                current_env_name, 
+                image, 
+                task_description, 
+                kwargs, 
+                additional_env_build_kwargs
+            )
         
         # Raw action would be needed for compatibility with the evaluation framework
         raw_action = {
@@ -139,6 +174,5 @@ class SITCOMInference:
             save_path: Path to save the visualization
         """
         # Delegate to the model's visualize_epoch method
-        # This is needed for compatibility with the evaluation framework
         if hasattr(self.planner.model, 'visualize_epoch'):
             return self.planner.model.visualize_epoch(actions, images, save_path)

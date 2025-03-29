@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from data4robotics import load_vit
 
+_AGENT_CACHE = {}
 
 class TransformerAttentionWrapper(torch.nn.Module):
     def __init__(self, transformer, layer_num=11):
@@ -102,15 +103,25 @@ def get_attention_heatmap(image, vit_model_name="VC1_hrp", layer=11, head=None,
             - heatmap_img: Image with heatmap overlay
             - raw_heatmap: The raw heatmap
     """
-    # Load the ViT model
-    vit_transform, vit_model = load_vit(vit_model_name)
-    vit_model.eval()
+    # Check if agent is already in cache
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    cache_key = f"{vit_model_name}_{device}"
     
-    # Create agent
-    agent = Agent(vit_model, vit_transform)
+    if cache_key not in _AGENT_CACHE:
+        print("Loading ViT model first time")
+        # Load the ViT model (uses caching from load_pretrained.py)
+        vit_transform, vit_model = load_vit(vit_model_name, device)
+        vit_model.eval()
+        
+        # Create agent
+        _AGENT_CACHE[cache_key] = Agent(vit_model, vit_transform)
+    
+    # Get agent from cache
+    agent = _AGENT_CACHE[cache_key]
     
     # Get attention
-    attn = agent.get_attention(image, layer)
+    with torch.no_grad():  # Add this to prevent memory leaks
+        attn = agent.get_attention(image, layer)
     
     # Use specified head or average across heads
     if head is None:

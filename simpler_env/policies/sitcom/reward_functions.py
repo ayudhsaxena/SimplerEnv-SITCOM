@@ -1,8 +1,354 @@
+
 import numpy as np
+from simpler_env.reward_scripts import calculate_affordance_metrics
+from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
+import os
+import tempfile
+import cv2
+import time
+import shutil
+from pathlib import Path
+import numpy as np
+import os
+import tempfile
+import cv2
+from simpler_env.reward_scripts import calculate_affordance_metrics
+from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
+import uuid
+import datetime
+
+def compute_image_metrics(image, target_object, gripper_name, visualize=False, save_metrics=False):
+    # Create a temporary file to save the image
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+        tmp_path = tmp_file.name
+        # Convert RGB to BGR for cv2.imwrite
+        if image.ndim == 3 and image.shape[2] == 3:
+            image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        else:
+            image_bgr = image
+        cv2.imwrite(tmp_path, image_bgr)
+    
+    try:
+        # Calculate affordance metrics for both carrot and plate
+        metrics = calculate_affordance_metrics(
+            img_path=tmp_path,
+            target_object=target_object,
+            gripper_name=gripper_name,
+            visualize=visualize,
+            save_metrics=save_metrics,
+        )
+        
+        return metrics
+    except Exception as e:
+         # If there's an error, delete the temporary file and return a default reward
+        # Save the error image to a specific directory
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        error_dir = "/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/outputs/error_images"
+        os.makedirs(error_dir, exist_ok=True)
+        error_filename = f"error_image_{timestamp}_{Path(tmp_path).stem}.png"
+        error_path = os.path.join(error_dir, error_filename)
+        if os.path.exists(tmp_path):
+            shutil.copy(tmp_path, error_path)
+        print(f"Error in affordance-based reward calculation for {Path(tmp_path).stem}: {str(e)}")
+        return None  # Default negative reward
+    finally:
+        # Clean up the temporary file
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+def compute_trajectory_statistics(image_history, window_sz=5):
+    """
+    Compute statistics for a trajectory based on image history.
+    
+    Args:
+        image_history: List of images in the trajectory
+        
+    Returns:
+        dict: Dictionary containing trajectory statistics
+    """
+    window_sz = min(window_sz, len(image_history))
+    assert len(image_history) >= window_sz, "Window size must be less than or equal to image history length"
+    
+    image_history = image_history[-window_sz:]  # Use only the last 'window_sz' images
+    carrot_positions = []
+    image_metrics = []
+    for img in image_history:
+        metrics = compute_image_metrics(
+            img,
+            target_object="carrot",
+            gripper_name="gripper",
+            visualize=False,
+            save_metrics=False
+        )
+        
+        if metrics is None:
+            continue
+        image_metrics.append(metrics)
+        carrot_positions.append(metrics['target_affordance_position'])
+
+    window_sz = min(window_sz, len(carrot_positions))
+    if window_sz == 0:
+        print(f"Unable to compute imasge metrics for the last {window_sz} images")
+        return None
+    positions_array = np.array(carrot_positions)
+    x_variance = np.var(positions_array[-window_sz:, 0])
+    y_variance = np.var(positions_array[-window_sz:, 1])
+    total_variance = x_variance + y_variance
+
+    
+    return {
+        'carrot_positions': carrot_positions,
+        'total_variance': total_variance,
+        'target_image_metrics': image_metrics,  
+    }
+def reward_for_put_carrot_on_plate_with_image(state, trajectory_images=None):
+    """
+    Reward function for putting a carrot on a plate using affordance metrics and reward history.
+    
+    Args:
+        state: The environment state
+        action: The action taken (optional)
+        image: The image directly provided (optional)
+        rewards_history: History of rewards with carrot positions and distances
+        
+    Returns:
+        float: The calculated reward
+    """
+    if trajectory_images is None:
+        print("Trajectory images cant be none")
+        return None
+    stat = compute_trajectory_statistics(trajectory_images,window_sz=5)
+    if stat is None:
+        print("image metrics for all images are None")
+        return None
+    carrot_metrics = stat['target_image_metrics'][-1] # take the last image metrics as representative
+
+    # Extract metrics
+    carrot_distance = carrot_metrics['normalized_distance']
+    carrot_position = carrot_metrics['target_affordance_position']  # Assuming this is available
+    
+
+    # Determine if carrot has been picked up based on position history
+    use_carrot_in_reward = True  # Default to focusing on carrot
+    
+    total_variance = stat['total_variance']
+    variance_threshold = 100  # This threshold would need tuning
+    print("Total variance of carrot positions: ", total_variance)
+    print("Carrot positions: ", stat['carrot_positions'])
+    if total_variance > variance_threshold and carrot_distance < 0.2: #also want the carrot-to-gripper distance to remain small
+        use_carrot_in_reward = False  # Carrot has moved, so focus on plate
+    
+    # Calculate reward based on whether to use carrot or plate
+    reward = 0.0
+    plate_metrics = None
+    if use_carrot_in_reward:
+        # Phase 1: Approaching and grasping carrot
+        # Reward for being close to optimal carrot affordance position
+        reward = 5.0 * (1.0 - carrot_distance)
+        
+        
+        # Bonus for being very close to optimal position
+        if carrot_distance < 0.08:
+            reward += 5.0
+    else:
+        print("USING PLATE IN REWARD")
+        # Phase 2: Moving carrot to plate
+        # Base reward for having picked up carrot
+        for img in reversed(trajectory_images):
+            plate_metrics = compute_image_metrics(
+                img,
+                target_object="plate",
+                gripper_name="gripper",
+                visualize=False,
+                save_metrics=False
+            )
+            if plate_metrics is not None:
+                break
+        if plate_metrics is None:
+            print("Unable to compute plate metrics for any image")
+            return None
+        plate_distance = plate_metrics['normalized_distance']
+        plate_affordance = plate_metrics['relative_affordance']
+        reward = 10
+        
+        # Reward for being close to optimal plate affordance position
+        reward += 5.0 * (1.0 - plate_distance)
+        
+        # Additional reward for being at high plate affordance value
+        reward += 3.0 * plate_affordance
+        
+        # Bonus for being very close to optimal position
+        if plate_distance < 0.1:
+            reward += 8.0  # Higher bonus for successful placement
+    
+
+    # Store current carrot information in rewards_history
+    metrics ={
+        'carrot_position': carrot_position,
+        'carrot_distance': carrot_distance,
+        'reward': reward,
+        'use_carrot_in_reward': use_carrot_in_reward,
+    }
+
+    if plate_metrics is not None:
+        metrics.update({
+            'plate_distance': plate_distance,
+        })
+    
+    return metrics
+
+
+
+# def reward_for_put_carrot_on_plate_with_image(state, action=None, image=None, rewards_history=None):
+#     """
+#     Reward function for putting a carrot on a plate using affordance metrics and reward history.
+    
+#     Args:
+#         state: The environment state
+#         action: The action taken (optional)
+#         image: The image directly provided (optional)
+#         rewards_history: History of rewards with carrot positions and distances
+        
+#     Returns:
+#         float: The calculated reward
+#     """
+#     if image is None:
+#         print("Image cant be none")
+#         return -1.0  # Default negative reward
+    
+#     carrot_metrics = compute_image_metrics(
+#         image,
+#         target_object="carrot",
+#         gripper_name="gripper",
+#         visualize=False,
+#         save_metrics=True,
+#     )
+#     plate_metrics = compute_image_metrics(
+#         image,
+#         target_object="plate",
+#         gripper_name="gripper",
+#         visualize=False,
+#         save_metrics=False
+#     )
+#     # Create a temporary file to save the image
+#     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+#         tmp_path = tmp_file.name
+#         # Convert RGB to BGR for cv2.imwrite
+#         if image.ndim == 3 and image.shape[2] == 3:
+#             image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+#         else:
+#             image_bgr = image
+#         cv2.imwrite(tmp_path, image_bgr)
+    
+#     try:
+#         # Calculate affordance metrics for both carrot and plate
+#         carrot_metrics = calculate_affordance_metrics(
+#             img_path=tmp_path,
+#             target_object="carrot",
+#             gripper_name="gripper",
+#             visualize=False,
+#             save_metrics=True,
+#         )
+        
+#         plate_metrics = calculate_affordance_metrics(
+#             img_path=tmp_path,
+#             target_object="plate",
+#             gripper_name="gripper",
+#             visualize=False,
+#             save_metrics=False
+#         )
+        
+#         # Delete the temporary file
+#         os.unlink(tmp_path)
+        
+#         # Extract metrics
+#         carrot_distance = carrot_metrics['normalized_distance']
+#         carrot_affordance = carrot_metrics['relative_affordance']
+#         carrot_position = carrot_metrics['target_affordance_position']  # Assuming this is available
+        
+#         plate_distance = plate_metrics['normalized_distance']
+#         plate_affordance = plate_metrics['relative_affordance']
+        
+#         # Determine if carrot has been picked up based on position history
+#         use_carrot_in_reward = True  # Default to focusing on carrot
+#         if rewards_history and len(rewards_history) >= 1:
+#             # Extract carrot positions from history
+#             carrot_positions = [entry.get('carrot_position', None) for entry in rewards_history]
+#             carrot_positions = [pos for pos in carrot_positions if pos is not None]
+            
+#             if len(carrot_positions) > 1:
+#                 # Calculate variance of carrot positions
+#                 positions_array = np.array(carrot_positions)
+#                 x_variance = np.var(positions_array[-2:, 0])
+#                 y_variance = np.var(positions_array[-2:, 1])
+#                 total_variance = x_variance + y_variance
+
+#                 # Small variance means carrot hasn't moved much (not picked up yet)
+#                 # Large variance means carrot has been moved (likely picked up)
+#                 print(f"Total variance of carrot positions between positions {positions_array[-2:]}: {total_variance}")
+#                 variance_threshold = 100  # This threshold would need tuning
+#                 if total_variance > variance_threshold:
+#                     use_carrot_in_reward = False  # Carrot has moved, so focus on plate
+        
+#         # Calculate reward based on whether to use carrot or plate
+#         reward = 0.0
+        
+#         if use_carrot_in_reward:
+#             # Phase 1: Approaching and grasping carrot
+#             # Reward for being close to optimal carrot affordance position
+#             reward = 5.0 * (1.0 - carrot_distance)
+            
+#             # # Additional reward for being at high affordance value
+#             # reward += 3.0 * carrot_affordance
+            
+#             # Bonus for being very close to optimal position
+#             if carrot_distance < 0.08:
+#                 reward += 5.0
+#         else:
+#             print("USING PLATE IN REWARD")
+#             # Phase 2: Moving carrot to plate
+#             # Base reward for having picked up carrot
+#             reward = 10
+            
+#             # Reward for being close to optimal plate affordance position
+#             reward += 5.0 * (1.0 - plate_distance)
+            
+#             # Additional reward for being at high plate affordance value
+#             reward += 3.0 * plate_affordance
+            
+#             # Bonus for being very close to optimal position
+#             if plate_distance < 0.1:
+#                 reward += 8.0  # Higher bonus for successful placement
+        
+#         # Store current carrot information in rewards_history
+#         metrics ={
+#             'carrot_position': carrot_position,
+#             'carrot_distance': carrot_distance,
+#             'plate_distance': plate_distance,
+#             'reward': reward,
+#             'use_carrot_in_reward': use_carrot_in_reward,
+#         }
+        
+#         return metrics
+    
+#     except Exception as e:
+#          # If there's an error, delete the temporary file and return a default reward
+#         # Save the error image to a specific directory
+#         error_dir = "/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/outputs/error_images"
+#         os.makedirs(error_dir, exist_ok=True)
+#         error_filename = f"error_image_{Path(tmp_path).stem}.png"
+#         error_path = os.path.join(error_dir, error_filename)
+#         if os.path.exists(tmp_path):
+#             shutil.copy(tmp_path, error_path)
+#         if os.path.exists(tmp_path):
+#             os.unlink(tmp_path)
+#         print(f"Error in affordance-based reward calculation: {str(e)}")
+#         return {'reward': -1.0}  # Default negative reward
 
 def reward_for_put_carrot_on_plate(state, action=None):
     """Reward function for putting a carrot on a plate."""
-    # breakpoint()
+    
     # Get evaluation results from parent class
     eval_results = state.evaluate(success_require_src_completely_on_target=True)
     
