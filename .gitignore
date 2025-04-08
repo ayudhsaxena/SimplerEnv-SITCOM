@@ -33,3 +33,8 @@ openvla_finetuned
 results-sitcom
 
 simpler_env/reward_scripts/outputs
+
+outputs
+
+generate_plots.ipynb
+reward_plot.png
