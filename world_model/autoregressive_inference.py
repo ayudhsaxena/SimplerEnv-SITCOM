@@ -9,7 +9,6 @@ from typing import List, Dict, Tuple, Optional, Any
 import os
 
 from tqdm import tqdm
-os.environ["TORCH_HOME"] = "/data/user_data/jasonl6/sandeep"
 import torch
 from torch.utils.data import DataLoader
 from dynamics_model import DynamicsModel
@@ -17,6 +16,12 @@ from dynamics_model.data import DynamicsModelDataset
 from evaluate_utils import * 
 from torchvision import transforms as T
 from PIL import Image
+import torchvision.utils as vutils 
+import torchvision
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -124,7 +129,7 @@ def create_trajectory_dataloader(
     json_path: str,
     root_dir: str,
     future_frames: int = 5,
-    batch_size: int = 32,
+    batch_size: int = 4,
     shuffle: bool = True,
     num_workers: int = 4
 ) -> DataLoader:
@@ -171,11 +176,10 @@ laq = DynamicsModel(
 )
 
 NUM_FUTURE_STEPS = 5
-val_dl = create_trajectory_dataloader(json_path= "/home/scratch/hshah2/aggregate_v3/simpler_v3.jsonl", root_dir= "/home/scratch/hshah2/aggregate_v3", future_frames=NUM_FUTURE_STEPS)
+val_dl = create_trajectory_dataloader(json_path= "/zfsauton2/home/hshah2/SITCOM/aggregate_v3/simpler_v3.jsonl", root_dir= "/zfsauton2/home/hshah2/SITCOM/aggregate_v3", future_frames=NUM_FUTURE_STEPS)
 
-breakpoint()
 
-pretrain_ckpt = "/home/jasonl6/sandeep/SimplerEnv-SITCOM/world_model/results/dyna1_simpl_ft_1/vae.pt"
+pretrain_ckpt = "/zfsauton2/home/hshah2/SITCOM/base_model.pt"
 ckpt = torch.load(pretrain_ckpt, map_location="cpu")["model"]
 msg = laq.load_state_dict(ckpt)
 print(msg)
@@ -192,56 +196,62 @@ for idx, val_sample in tqdm(enumerate(val_dl)):
     actions = val_sample["actions"].to(device) # B x (K-1) x A
     future_iters = actions.shape[1]
     curr_img_batch = images[:,0]
-    for i in range(1, future_iters):
+    recons_img_list = []
+    for i in range(1, future_iters + 1):
         gt_img_batch = images[:, i]
         action_batch = actions[:, i-1]
         recons_img_batch = laq(curr_img_batch, action_batch, gt_img_batch, return_recons_only=True)
         batch_results = batch_evaluator[i-1].evaluate_batch(images[:, 0], recons_img_batch, gt_img_batch)
-    
+        recons_img_list.append(recons_img_batch[0])
         # Accumulate metrics
         total_of_loss[i-1] += batch_results["optical_flow_loss"]
         total_fid_sum[i-1] += batch_results["fid_score"]
-    
+        curr_img_batch = recons_img_batch
+    grid = torchvision.utils.make_grid(
+        torch.cat((images[0,1:], torch.stack(recons_img_list, dim=0)), dim=0),  # Concatenate gt and recons images
+        nrow=images[0].shape[0] - 1,  # Number of images per row (batch size)
+        padding=2,  # Padding between images
+    )
+    vutils.save_image(grid, f"autoregressive_results/comparison{idx}.png")
     num_batches += 1
     
-# Compute average metrics
-avg_of_loss = [elem / num_batches for elem in total_of_loss]
-avg_batch_fid = [elem / num_batches for elem in total_fid_sum] 
-global_fid = [elem.evaluator.fid_calculator.compute() for elem in batch_evaluator]
-print(f'Global FID: {batch_results["fid_score"]}')
+    # Set Seaborn style for aesthetics
+    sns.set_style("whitegrid")
+    # Compute average metrics
+    avg_of_loss = [elem / num_batches for elem in total_of_loss]
+    avg_batch_fid = [elem / num_batches for elem in total_fid_sum] 
+    global_fid = [elem.evaluator.fid_calculator.compute().cpu() for elem in batch_evaluator]
+    # Plot avg_of_loss and save
+    plt.figure(figsize=(8, 5))
+    plt.plot(avg_of_loss, marker='o', linestyle='-', color='royalblue', label='Avg Optical Loss')
+    plt.xlabel("Future step")
+    plt.ylabel("Optical Loss")
+    plt.title("Average Optical Loss Over Epochs")
+    plt.legend()
+    plt.savefig("avg_of_loss_plot.png", dpi=300)
+    plt.close()
+
+    # Plot avg_batch_fid and save
+    plt.figure(figsize=(8, 5))
+    plt.plot(avg_batch_fid, marker='s', linestyle='--', color='darkorange', label='Avg Batch FID')
+    plt.xlabel("Future step")
+    plt.ylabel("Batch FID")
+    plt.title("Average Batch FID Over Epochs")
+    plt.legend()
+    plt.savefig("avg_batch_fid_plot.png", dpi=300)
+    plt.close()
+
+    # Plot global_fid and save
+    plt.figure(figsize=(8, 5))
+    plt.plot(global_fid, marker='d', linestyle='-', color='green', label='Global FID')
+    plt.xlabel("Future step")
+    plt.ylabel("Global FID")
+    plt.title("Global FID Over Epochs")
+    plt.legend()
+    plt.savefig("global_fid_plot.png", dpi=300)
+    plt.close()
+    
 
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-# Set Seaborn style for aesthetics
-sns.set_style("whitegrid")
 
-# Plot avg_of_loss and save
-plt.figure(figsize=(8, 5))
-plt.plot(avg_of_loss, marker='o', linestyle='-', color='royalblue', label='Avg Optical Loss')
-plt.xlabel("Epochs")
-plt.ylabel("Optical Loss")
-plt.title("Average Optical Loss Over Epochs")
-plt.legend()
-plt.savefig("avg_of_loss_plot.png", dpi=300)
-plt.close()
 
-# Plot avg_batch_fid and save
-plt.figure(figsize=(8, 5))
-plt.plot(avg_batch_fid, marker='s', linestyle='--', color='darkorange', label='Avg Batch FID')
-plt.xlabel("Epochs")
-plt.ylabel("Batch FID")
-plt.title("Average Batch FID Over Epochs")
-plt.legend()
-plt.savefig("avg_batch_fid_plot.png", dpi=300)
-plt.close()
-
-# Plot global_fid and save
-plt.figure(figsize=(8, 5))
-plt.plot(global_fid, marker='d', linestyle='-', color='green', label='Global FID')
-plt.xlabel("Epochs")
-plt.ylabel("Global FID")
-plt.title("Global FID Over Epochs")
-plt.legend()
-plt.savefig("global_fid_plot.png", dpi=300)
-plt.close()

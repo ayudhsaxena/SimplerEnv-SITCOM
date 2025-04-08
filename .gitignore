@@ -33,3 +33,4 @@ openvla_finetuned
 results-sitcom
 
 simpler_env/reward_scripts/outputs
+*.png
