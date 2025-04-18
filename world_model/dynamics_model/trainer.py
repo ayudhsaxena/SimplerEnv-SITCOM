@@ -7,7 +7,7 @@ from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import DistributedType
 from beartype import beartype
 
-from dynamics_model.data import DynamicsModelDataset
+from dynamics_model.data import DynamicsModelDataset, DynamicsModelAutoregressiveDataset
 from dynamics_model.optimizer import get_optimizer, get_optimizer_pretrained_init
 from einops import rearrange
 from ema_pytorch import EMA
@@ -71,10 +71,11 @@ class DynamicsModelTrainer(nn.Module):
         accelerate_kwargs: dict = dict(),
         resume_checkpoint=None,
         wandb_kwargs: dict = dict(),
+        autoregressive=False,
     ):
         super().__init__()
         image_size = vae.image_size
-
+        self.autoregressive = autoregressive
         # wandb config
         config = {}
         arguments = locals()
@@ -135,7 +136,11 @@ class DynamicsModelTrainer(nn.Module):
         self.max_grad_norm = max_grad_norm
         self.discr_max_grad_norm = discr_max_grad_norm
 
-        ds = DynamicsModelDataset(folder, image_size, mode="trainval")
+        if self.autoregressive:
+            ds = DynamicsModelAutoregressiveDataset(folder, image_size, mode="trainval")    
+        else:
+            ds = DynamicsModelDataset(folder, image_size, mode="trainval")
+       
         # Split the dataset into training and validation sets with fixed generator for reproducibility
         # Ensure dataset does seeded shuffling internally
         train_size = int(0.95 * len(ds))  # 95% for training
@@ -340,9 +345,141 @@ class DynamicsModelTrainer(nn.Module):
 
         self.steps += 1
         return logs
+    
+    def train_step_autoregressive(self):
+        device = self.device
+        steps = int(self.steps.item())
+        
+        self.vae.train()
+        
+        # logs
+        logs = {}
+        
+        # update vae (generator)
+        for _ in range(self.grad_accum_every):
+            window_imgs, window_actions, window_next_imgs = next(self.dl_iter)
+            breakpoint
+            
+            # window_imgs, window_actions, window_next_imgs have shape [B, window_size-1, C, H, W]
+            batch_size = window_imgs.shape[0]
+            window_size = window_imgs.shape[1] 
+            
+            window_imgs = window_imgs.to(device)
+            window_actions = window_actions.to(device)
+            window_next_imgs = window_next_imgs.to(device)
+            
+            # Initialize total loss for this window
+            window_log_dict = {}
+            
+            # Start with the first frame in the window
+            current_img = window_imgs[:, 0]  # [B, C, H, W]
+            
+            # Process each step in the window autoregressively
+            for i in range(window_size):
+                # Get the action for this step
+                action = window_actions[:, i]  # [B, action_dim]
+                
+                # Get the target next image
+                target_next_img = window_next_imgs[:, i]  # [B, C, H, W]
+                
+                # Forward pass
+                step_loss, step_log_dict, predicted_next_img = self.vae(
+                    current_img, action, target_next_img, step=steps
+                )
+                
+                # # Add to the total loss
+                # total_loss += step_loss
+                
+                # Accumulate logs (prefix the keys with step index)
+                for k, v in step_log_dict.items():
+                    window_log_dict[f"step{i}_{k}"] = v
+                
+                # # Use the predicted image as input for the next step if not the last iteration
+                # if i < window_size - 1:
+                # Detach to prevent backpropagating through the entire sequence
+                # Remove this detach() if you want to backpropagate through the entire sequence
+                current_img = predicted_next_img.clone().detach()
+
+                #  # Average the loss over window steps
+                # avg_loss = total_loss / window_size
+            
+                # Backward pass
+                self.accelerator.backward(step_loss / self.grad_accum_every)
+            
+                # Update logs
+                accum_log(logs, window_log_dict, 1.0 / self.grad_accum_every)
+        
+                if exists(self.max_grad_norm):
+                    self.accelerator.clip_grad_norm_(self.vae.parameters(), self.max_grad_norm)
+        
+                self.optim.step()
+                self.optim.zero_grad()
+            
+           
+        
+        if self.is_main and self.use_ema:
+            self.ema_vae.update()
+        
+        if self.is_main and not (steps % self.save_results_every):
+            unwrapped_vae = self.accelerator.unwrap_model(self.vae)
+            vaes_to_evaluate = ((unwrapped_vae, str(steps)),)
+            
+            if self.use_ema:
+                vaes_to_evaluate = ((self.ema_vae.ema_model, f"{steps}.ema"),) + vaes_to_evaluate
+            
+            for model, filename in vaes_to_evaluate:
+                model.eval()
+                
+                valid_window_imgs, valid_window_actions, valid_window_next_imgs = next(self.valid_dl_iter)
+                
+                # Use only the first frame for visualization
+                valid_img = valid_window_imgs[:, 0].to(device)
+                valid_action = valid_window_actions[:, 0].to(device)
+                valid_future_img = valid_window_next_imgs[:, 0].to(device)
+                
+                recons = model(valid_img, valid_action, valid_future_img, return_recons_only=True)
+                
+                # Visualize autoregressive prediction for multiple steps if desired
+                # This section can be expanded to show multi-step prediction
+                max_image_to_save = min(16, valid_img.shape[0])
+                imgs_and_recons = torch.cat(
+                    (valid_img[:max_image_to_save], valid_future_img[:max_image_to_save], recons[:max_image_to_save]),
+                    dim=0,
+                )  # [3b, c, h, w]
+                
+                imgs_and_recons = imgs_and_recons.detach().cpu().float().clamp(0.0, 1.0)
+                grid = make_grid(imgs_and_recons, nrow=max_image_to_save, normalize=True, value_range=(0, 1))
+                save_image(grid, str(self.results_folder / f"{filename}.png"))
+            
+            self.print(f"{steps}: saving to {str(self.results_folder)}")
+        
+        # save model every so often
+        self.accelerator.wait_for_everyone()
+        
+        if self.is_main and not (steps % self.save_model_every):
+            self.save(str(self.results_folder / f"vae.pt"))
+        
+        if self.is_main and not (steps % self.save_milestone_every):
+            state_dict = self.vae.state_dict()
+            model_path = str(self.results_folder / f"vae.{steps}.pt")
+            torch.save(state_dict, model_path)
+            
+            if self.use_ema:
+                ema_state_dict = self.ema_vae.state_dict()
+                model_path = str(self.results_folder / f"vae.{steps}.ema.pt")
+                torch.save(ema_state_dict, model_path)
+            
+            self.print(f"{steps}: saving model to {str(self.results_folder)}")
+        
+        self.steps += 1
+        return logs
 
     def train(self, log_fn=noop):
         while self.steps < self.num_train_steps:
-            logs = self.train_step()
+            if self.autoregressive:
+
+                logs = self.train_step_autoregressive()
+            else:
+                logs = self.train_step()
             self.accelerator.log(logs)
         self.print("training complete")

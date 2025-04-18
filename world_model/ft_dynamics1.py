@@ -12,12 +12,12 @@ laq = DynamicsModel(
     heads=16,
     use_lpips_loss=True,
 )
-pretrain_ckpt = "results/dyna1_bridge_4f4c35d2/vae.pt"
+pretrain_ckpt = "/data/user_data/ayudhs/random/multimodal/base_model.pt"
 ckpt = torch.load(pretrain_ckpt, map_location="cpu")["model"]
 msg = laq.load_state_dict(ckpt)
 print(msg)
 
-save_folder = "results/"
+save_folder = "/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/results"
 run_name = "dyna1_simpl_ft"
 run_id = "1"
 results_folder = os.path.join(save_folder, run_name + "_" + run_id)
@@ -52,6 +52,7 @@ trainer = DynamicsModelTrainer(
     accelerate_kwargs=dict(log_with="wandb"),
     resume_checkpoint=ckpt_path if os.path.exists(ckpt_path) else None,
     wandb_kwargs=wandb_kwargs,
+    autoregressive=True,
 )
 
 trainer.train()
