@@ -167,4 +167,4 @@ class DynamicsModel(nn.Module):
             "step": step,
         }
         check_for_nan(loss)
-        return loss, log_dict
+        return loss, log_dict, recon_image

@@ -20,7 +20,13 @@ num_trajs_oxe = {
     "kuka": {"trainval": 70000, "val": 7000},
 }
 
+num_trajs_ft = {
+    "simpler": {"trainval": 80, "val": 20},
+    "bridge": {"trainval": 25460, "val": 2546},
+}
+
 robot_data_root = "/data/hf_cache/OpenX/fractal"
+simpler_data_root = "/data/user_data/ayudhs/random/multimodal/aggregate_v3"
 
 
 def exists(val):
@@ -115,6 +121,96 @@ def process_ssv2_videos(root_dir: Path, mode: str) -> List[Path]:
     return paths
 
 
+def prcess_simpler_videos(dataset_name: str, mode: str):
+    data_root = Path(simpler_data_root)
+    env_dict: dict[str, list[str]] = {}
+    for env in data_root.iterdir():
+        if env.is_dir():
+            env_dict[str(env)] = []
+    
+    for env in env_dict:
+        env_dir = data_root / env
+        for traj in env_dir.iterdir():
+            if not traj.is_dir():
+                continue
+            env_dict[env].append(str(traj))
+    
+    local_random = random.Random(42)
+    for env in env_dict:
+        local_random.shuffle(env_dict[env])
+        assert len(env_dict[env]) == sum([x // len(env_dict) for x in num_trajs_ft[dataset_name].values()])
+        num_trajs = num_trajs_ft[dataset_name]["trainval"] // len(env_dict)
+        if mode == "trainval":
+            env_dict[env] = env_dict[env][:num_trajs]
+        elif mode == "val":
+            env_dict[env] = env_dict[env][num_trajs:]
+    data = []
+    for env in env_dict:
+        env_dir = data_root / env
+        for traj in env_dict[env]:
+            traj_dir = env_dir / traj
+            images_path = str(traj_dir / "images")
+            actions_file = str(traj_dir / "actions.npy")
+            actions = np.load(actions_file)
+            images = sorted(os.listdir(images_path))
+            for idx in range(len(images) - 1):
+                 data.append((os.path.join(images_path, images[idx]), actions[idx], os.path.join(images_path, images[idx + 1])))
+    return data
+
+def process_simpler_videos_autoregressive(dataset_name: str, mode: str, window_size: int = 5):
+    data_root = Path(simpler_data_root)
+    env_dict: dict[str, list[str]] = {}
+    
+    for env in data_root.iterdir():
+        if env.is_dir():
+            env_dict[str(env)] = []
+    
+    for env in env_dict:
+        env_dir = data_root / env
+        for traj in env_dir.iterdir():
+            if not traj.is_dir():
+                continue
+            env_dict[env].append(str(traj))
+    
+    local_random = random.Random(42)
+    for env in env_dict:
+        local_random.shuffle(env_dict[env])
+        assert len(env_dict[env]) == sum([x // len(env_dict) for x in num_trajs_ft[dataset_name].values()])
+        num_trajs = num_trajs_ft[dataset_name]["trainval"] // len(env_dict)
+        if mode == "trainval":
+            env_dict[env] = env_dict[env][:num_trajs]
+        elif mode == "val":
+            env_dict[env] = env_dict[env][num_trajs:]
+    
+    data = []
+    for env in env_dict:
+        env_dir = data_root / env
+        for traj in env_dict[env]:
+            traj_dir = env_dir / traj
+            images_path = str(traj_dir / "images")
+            actions_file = str(traj_dir / "actions.npy")
+            actions = np.load(actions_file)
+            images = sorted(os.listdir(images_path))
+            
+            # Ensure we have enough frames to create a window of the specified size
+            for start_idx in range(len(images) - window_size + 1):
+                window_data = []
+                
+                # Create a tuple for each frame in the window
+                for offset in range(window_size - 1):
+                    idx = start_idx + offset
+                    window_data.append((
+                        os.path.join(images_path, images[idx]),
+                        actions[idx],
+                        os.path.join(images_path, images[idx + 1])
+                    ))
+                
+                # Add the sequence of tuples to our dataset
+                data.append(window_data)
+    
+    return data
+            
+
 class DynamicsModelDataset(Dataset):
     def __init__(
         self,
@@ -137,6 +233,8 @@ class DynamicsModelDataset(Dataset):
                 self.data_list.extend(process_oxe_videos("bridge", mode))
             if "kuka" in data_dir:
                 self.data_list.extend(process_oxe_videos("kuka", mode))
+            if "simpler" in data_dir:
+                self.data_list.extend(prcess_simpler_videos("simpler", mode))
             if "ego4d" in data_dir:
                 raise NotImplementedError("ego4d dataset not implemented yet")
 
@@ -170,7 +268,7 @@ class DynamicsModelDataset(Dataset):
         # shuffle the video list
         local_random = random.Random(42)
         local_random.shuffle(self.data_list)
-        print(f"Found {len(self.data_list)} videos in {mode} mode!")
+        print(f"Found {len(self.data_list)} samples in {mode} mode!")
 
     def __len__(self):
         return len(self.data_list)
@@ -192,11 +290,112 @@ class DynamicsModelDataset(Dataset):
             else:
                 return self.__getitem__(random.randint(0, self.__len__() - 1))
 
+class DynamicsModelAutoregressiveDataset(Dataset):
+    def __init__(
+        self,
+        folder: List[str],
+        image_size: int,
+        mode: str = "train",
+        window_size: int = 5,
+    ):
+        super().__init__()
+
+        self.folder = folder
+        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        self.data_list = []
+        for data_dir in folder:
+            if "something-something-v2" in data_dir:
+                # self.video_list.extend(process_ssv2_videos(Path(f"{data_dir}"), mode))
+                raise NotImplementedError("Something-something-v2 dataset not implemented yet")
+            if "fractal" in data_dir:
+                self.data_list.extend(process_oxe_videos("fractal", mode))
+            if "bridge" in data_dir:
+                self.data_list.extend(process_oxe_videos("bridge", mode))
+            if "kuka" in data_dir:
+                self.data_list.extend(process_oxe_videos("kuka", mode))
+            if "simpler" in data_dir:
+                self.data_list.extend(process_simpler_videos_autoregressive("simpler", mode, window_size=window_size))
+            if "ego4d" in data_dir:
+                raise NotImplementedError("ego4d dataset not implemented yet")
+
+        self.transform = T.Compose(
+            [
+                T.Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
+                T.Resize(self.image_size),
+                T.ToTensor(),
+            ]
+        )
+        # Use bridge stats for all datasets
+        self.action_mean = torch.tensor([
+            0.00023341893393080682,
+            0.0001300494186580181,
+            -0.0001276240509469062,
+            -0.00015565630747005343,
+            -0.0004039352061226964,
+            0.00023557755048386753,
+            0.5764579772949219
+        ], dtype=torch.float32).reshape(-1)
+        self.action_std = torch.tensor([
+            0.009765958413481712,
+            0.01368918176740408,
+            0.012667348608374596,
+            0.02853415347635746,
+            0.03063797391951084,
+            0.07691441476345062,
+            0.4973689615726471
+        ], dtype=torch.float32).reshape(-1)
+
+        # shuffle the video list
+        local_random = random.Random(42)
+        local_random.shuffle(self.data_list)
+        print(f"Found {len(self.data_list)} samples in {mode} mode!")
+
+    def __len__(self):
+        return len(self.data_list)
+    
+    def __getitem__(self, index):
+        try:
+            # Now self.data_list[index] is a list of tuples for the window
+            window_data = self.data_list[index]
+            
+            # Process all frames in the window
+            window_imgs = []
+            window_actions = []
+            window_next_imgs = []
+            
+            for img_path, action, next_img_path in window_data:
+                img = Image.open(img_path)
+                next_img = Image.open(next_img_path)
+                
+                img = self.transform(img)
+                next_img = self.transform(next_img)
+                
+                action = torch.tensor(action, dtype=torch.float32).reshape(-1)
+                action = (action - self.action_mean) / self.action_std
+                
+                window_imgs.append(img)
+                window_actions.append(action)
+                window_next_imgs.append(next_img)
+            
+            # Stack all images and actions along a new dimension
+            window_imgs = torch.stack(window_imgs, dim=0)  # [window_size-1, C, H, W]
+            window_actions = torch.stack(window_actions, dim=0)  # [window_size-1, action_dim]
+            window_next_imgs = torch.stack(window_next_imgs, dim=0)  # [window_size-1, C, H, W]
+            
+            return window_imgs, window_actions, window_next_imgs
+        
+        except Exception as e:
+            print(f"Error at index {index}: {e}")
+            if index < self.__len__() - 1:
+                return self.__getitem__(index + 1)
+            else:
+                return self.__getitem__(random.randint(0, self.__len__() - 1))
+
 
 if __name__ == "__main__":
     # test video dataset
-    dataset = DynamicsModelDataset(["bridge"], 256, mode="val")
-    t1 = dataset[337]
+    dataset = DynamicsModelDataset(["simpler"], 256, mode="trainval")
+    t1 = dataset[4]
     import ipdb
 
     ipdb.set_trace()
