@@ -389,7 +389,6 @@ def get_dir_stats(
 ) -> Sequence[int]:
     if dir_name[-1] == "/":
         dir_name = dir_name[:-1]
-
     results = []
     fnames = glob.glob(dir_name + "/**/*.mp4", recursive=True)
     for fname in fnames:

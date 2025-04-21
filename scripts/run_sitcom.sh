@@ -4,8 +4,11 @@ model_name=sitcom
 tasks=(
   bridge.sh
 )
+# ckpts=(
+#   openvla/openvla-7b
+# )
 ckpts=(
-  openvla/openvla-7b
+    /home/rishisha/SimplerEnv-SITCOM/openvla_finetuned/openvla-7b+simpler_rlds+b6+lr-0.0005+lora-r16+dropout-0.0--image_aug
 )
 
 action_ensemble_temp=-0.8

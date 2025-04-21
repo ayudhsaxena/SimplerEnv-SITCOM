@@ -17,6 +17,9 @@ from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_ob
 from simpler_env.utils.visualization import write_interval_video, write_video
 from simpler_env.policies.sitcom.reward_functions import *
 
+import json
+import cv2
+
 
 
 def get_reward_function(env_name):
@@ -36,7 +39,71 @@ def get_reward_function(env_name):
         return reward_for_put_carrot_on_plate
 
     
+def save_trajectory_pair(epi_id, pair_id, env_name, img1, img2, reward):
+    """
+    Save a pair of images with their associated reward.
+    
+    Args:
+        base_dir (str): Base directory for storing trajectories
+        env_name (str): Name of the environment
+        img1 (numpy.ndarray): First image in the pair
+        img2 (numpy.ndarray): Second image in the pair
+        reward (float): Reward associated with this pair
+        pair_id (str, optional): Unique identifier for this pair
         
+    Returns:
+        dict: Information about the saved pair
+    """
+    trajectory_dir = os.path.join("/data/user_data/rishisha/sitcom/trajectories_ft_sim", env_name)
+    os.makedirs(trajectory_dir, exist_ok=True)
+    # Create directories
+    images_dir = os.path.join(trajectory_dir, "images")
+    os.makedirs(images_dir, exist_ok=True)
+    
+    img_id = f"{epi_id}_{pair_id}"
+    
+    # Save images
+    img1_path = os.path.join(images_dir, f"{img_id}_img1.png")
+    img2_path = os.path.join(images_dir, f"{img_id}_img2.png")
+    # Convert from RGB to BGR if needed before saving
+    if len(img1.shape) == 3 and img1.shape[2] == 3:
+        img1_to_save = cv2.cvtColor(img1, cv2.COLOR_RGB2BGR)
+        img2_to_save = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
+    else:
+        img1_to_save = img1
+        img2_to_save = img2
+    
+    cv2.imwrite(img1_path, img1_to_save)
+    cv2.imwrite(img2_path, img2_to_save)
+    
+    # Record metadata
+    pair_info = {
+        "image1_path": img1_path,
+        "image2_path": img2_path,
+        "reward": float(reward)
+    }
+    
+    # Save metadata to json
+    meta_path = os.path.join(trajectory_dir, "trajectory_pairs.json")
+    
+    # Load existing data if it exists
+    if os.path.exists(meta_path):
+        with open(meta_path, "r") as f:
+            try:
+                all_pairs = json.load(f)
+            except json.JSONDecodeError:
+                all_pairs = []
+    else:
+        all_pairs = []
+    
+    # Add new pair
+    all_pairs.append(pair_info)
+    
+    # Save updated data
+    with open(meta_path, "w") as f:
+        json.dump(all_pairs, f, indent=2)
+    
+    return pair_info
         
 def run_maniskill2_eval_single_episode(
     model,
@@ -138,6 +205,14 @@ def run_maniskill2_eval_single_episode(
     reward_function = get_reward_function(env_name)
     
     action_list = []
+    
+    collect_trajectory = True
+    
+    if collect_trajectory:
+        pair_id = 0
+        rewards_trj = [reward_function(env)]
+        timestamps_trj = 5
+        curr_timestamp = timestamps_trj
 
     timestep = 0
     success = "failure"
@@ -195,10 +270,69 @@ def run_maniskill2_eval_single_episode(
             env, obs, camera_name=obs_camera_name
         )
         images.append(image)
+        
+        if collect_trajectory:
+            rewards_trj.append(reward_cal)
+            if curr_timestamp == timestep+1:
+                # save trajectory pair
+                print(f"Saving trajectory pair at timestep {timestep}")
+                # save trajectory pair
+                save_trajectory_pair(
+                    obj_episode_id,
+                    pair_id,
+                    env_name=env_name,
+                    img1=images[curr_timestamp - timestamps_trj],
+                    img2=images[curr_timestamp],
+                    reward=rewards_trj[curr_timestamp]-rewards_trj[curr_timestamp - timestamps_trj],
+                )
+                pair_id +=1
+                curr_timestamp += timestamps_trj
+        
         task_descriptions.append(task_description)
         if success == "success":
+            if collect_trajectory:
+                # save trajectory pair
+                print(f"Saving trajectory pair at timestep {timestep}")
+                
+                save_trajectory_pair(
+                    obj_episode_id,
+                    pair_id,
+                    env_name=env_name,
+                    img1=images[timestep+1 - timestamps_trj],
+                    img2=images[timestep+1],
+                    reward=rewards_trj[timestep+1]-rewards_trj[timestep+1 - timestamps_trj],
+                )
             break
         timestep += 1
+        
+    # print errors :
+    if isinstance(env, SITCOMInference):
+        print("Erros in reward modelling: ")
+        point_wise_errors = model.planner.point_wise_error
+        ranking_errors = model.planner.ranking_error
+        
+        print("Point wise errors: ", point_wise_errors)
+        print("Ranking errors: ", ranking_errors)
+        
+        # average errors
+        avg_point_wise_errors = np.mean(point_wise_errors)
+        avg_ranking_errors = np.mean(ranking_errors)
+        
+        print("Average point wise errors: ", avg_point_wise_errors)
+        print("Average ranking errors: ", avg_ranking_errors)
+        
+        # save these in a json file
+        error_dict = {
+            "point_wise_errors": point_wise_errors,
+            "ranking_errors": ranking_errors,
+            "avg_point_wise_errors": avg_point_wise_errors,
+            "avg_ranking_errors": avg_ranking_errors,
+        }
+        
+        error_path = os.path.join(logging_dir, "errors.json")
+        with open(error_path, "w") as f:
+            json.dump(error_dict, f, indent=4)
+        
 
     episode_stats = info.get("episode_stats", {})
 

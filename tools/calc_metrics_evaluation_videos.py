@@ -1119,6 +1119,8 @@ def calc_bridge_put_on_env_stats(root_result_dir):
             # "octo-small": 0.400,
         },
     }
+    
+    # breakpoint()
 
     tasks = list(real_success_dict.keys())
     ckpt_alias_keys = list(real_success_dict[tasks[0]].keys())
@@ -1292,7 +1294,7 @@ CKPT_MAPPING = {
     # "openvla-7b": "openvla-7b",
     # "internvla-1_8b": "internvla-1_8b",
     # "internvla_diff-1_8b": "internvla_diff-1_8b",
-    "ours": "TODO",
+    "ours": "/home/rishisha/SimplerEnv-SITCOM/openvla_finetuned/openvla-7b+simpler_rlds+b6+lr-0.0005+lora-r16+dropout-0.0--image_aug",
     # "octo-small": "octo-small",
     # "octo-server": "octo-server",
 }
@@ -1303,23 +1305,25 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+# breakpoint()
+
 # NOTE: replace the CKPT_MAPPING with the actual checkpoint directories
 CKPT_MAPPING["ours"] = Path(args.log_dir_root).name
 
-pick_coke_can_results = calc_pick_coke_can_stats(str(Path(args.log_dir_root).parent))
-move_near_real_results = calc_move_near_stats(str(Path(args.log_dir_root).parent))
-drawer_results = calc_drawer_stats(str(Path(args.log_dir_root).parent))
-long_horizon_apple_in_drawer_results = calc_long_horizon_apple_in_drawer_stats(str(Path(args.log_dir_root).parent))
+# pick_coke_can_results = calc_pick_coke_can_stats(str(Path(args.log_dir_root).parent))
+# move_near_real_results = calc_move_near_stats(str(Path(args.log_dir_root).parent))
+# drawer_results = calc_drawer_stats(str(Path(args.log_dir_root).parent))
+# long_horizon_apple_in_drawer_results = calc_long_horizon_apple_in_drawer_stats(str(Path(args.log_dir_root).parent))
 bridge_put_on_results = calc_bridge_put_on_env_stats(
     str(Path(args.log_dir_root).parent)
 )
 
 results = {
-    **pick_coke_can_results,
-    **move_near_real_results,
-    **drawer_results,
+    # **pick_coke_can_results,
+    # **move_near_real_results,
+    # **drawer_results,
     **bridge_put_on_results,
-    **long_horizon_apple_in_drawer_results,
+    # **long_horizon_apple_in_drawer_results,
     "ckpt_name": ["ours"],
 }
 

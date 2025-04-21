@@ -31,3 +31,10 @@ imgui.ini
 results/
 openvla_finetuned
 results-sitcom
+results*
+debug_images
+
+action_entropy*
+slurm*
+
+try.py

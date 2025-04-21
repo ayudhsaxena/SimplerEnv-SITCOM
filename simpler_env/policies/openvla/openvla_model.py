@@ -34,6 +34,7 @@ class OpenVLAInference:
             )
         self.policy_setup = policy_setup
         self.unnorm_key = unnorm_key
+        # breakpoint()
 
         print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key} ***")
         self.processor = AutoProcessor.from_pretrained(saved_model_path, trust_remote_code=True)
