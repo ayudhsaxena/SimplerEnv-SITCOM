@@ -206,7 +206,7 @@ def run_maniskill2_eval_single_episode(
     
     action_list = []
     
-    collect_trajectory = True
+    collect_trajectory = False
     
     if collect_trajectory:
         pair_id = 0

@@ -1,6 +1,9 @@
 from simpler_env.policies.sitcom.two_simulator_planner import TwoSimulatorPlanner
+from simpler_env.policies.sitcom.general_rewarder import GeneralRewarder
+from memory.reward_memory import RewardMemory
 import numpy as np
 from collections import deque
+import os
 
 class SITCOMInference:
     """
@@ -43,11 +46,22 @@ class SITCOMInference:
             action_scale: Scaling factor for actions
             trajectory_length: Length of trajectory to request from planner
         """
+        
+        API_KEY = os.environ.get("GEMINI_API_KEY")
+        # breakpoint()
+        
+        # TODO check this
+        memory = RewardMemory.load("./memory/reward_memory_state.pkl", api_key=API_KEY)
+        
+        ### create rewarder
+        self.rewarder = GeneralRewarder(memory, api_key=API_KEY, num_examples=4)
+        
         # Create the planner
         self.planner = TwoSimulatorPlanner(
             env_name=env_name,
             saved_model_path=saved_model_path,
             reward_function=reward_function,
+            rewarder=self.rewarder,
             num_initial_actions=num_initial_actions,
             horizon_per_action=horizon_per_action,
             num_steps_ahead=num_steps_ahead,
@@ -58,8 +72,10 @@ class SITCOMInference:
             logging_dir=logging_dir,
             policy_setup=policy_setup,
             action_scale=action_scale,
-            verbose=True
+            verbose=False
         )
+        
+        
         
         self.task_description = None
         self.action_buffer = deque()  # Buffer to store trajectory actions

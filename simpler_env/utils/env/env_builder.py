@@ -14,6 +14,7 @@ def build_maniskill2_env(env_name, **kwargs):
             else:
                 raise NotImplementedError()
     env = gym.make(env_name, **kwargs)
+    # env = gym.make(env_name, render_mode="none")
 
     return env
 

@@ -29,6 +29,7 @@ class TwoSimulatorPlanner:
         env_name,
         saved_model_path: str = "openvla/openvla-7b",
         reward_function=None,
+        rewarder=None,
         num_initial_actions=10,  # A parameter
         horizon_per_action=5,    # Horizon parameter
         num_steps_ahead=3,       # h parameter
@@ -68,6 +69,8 @@ class TwoSimulatorPlanner:
             # unnorm_key='bridge_orig',
         )
         
+        # Initialize the rewarder
+        self.rewarder = rewarder
         
         # Set up reward function or use default
         if reward_function is None:
@@ -75,7 +78,7 @@ class TwoSimulatorPlanner:
         else:
             self.reward_function = reward_function
             
-        self.gemini_reward_function = gemini_reward
+        # self.gemini_reward_function = gemini_reward
         
         # Hyperparameters
         self.num_initial_actions = num_initial_actions  # A
@@ -295,22 +298,146 @@ class TwoSimulatorPlanner:
         """
         return self.reward_function(state, action)
 
+    # def ndcg_at_k(self, oracle_rewards, gemini_rewards, k=None):
+    #     """
+    #     Compute NDCG@k treating oracle_rewards as ground truth relevances.
+    #     If k is None we use all trajectories.
+    #     """
+    #     if k is None:
+    #         k = len(oracle_rewards)
+        
+    #     # Normalize oracle_rewards to be non-negative
+    #     min_reward = min(oracle_rewards)
+    #     normalized_oracle = [r - min_reward for r in oracle_rewards]
+        
+    #     # ideal DCG: sort oracle descending
+    #     ideal = sorted(normalized_oracle, reverse=True)[:k]
+        
+    #     def dcg(rs):
+    #         return sum((2**r - 1) / np.log2(i+2) for i, r in enumerate(rs))
+        
+    #     idcg = dcg(ideal)
+        
+    #     # DCG of the gemini-ranked list
+    #     order = np.argsort(gemini_rewards)[::-1][:k]
+    #     rels = [normalized_oracle[i] for i in order]
+        
+    #     return dcg(rels) / idcg if idcg > 0 else 0.0
+    
     def ndcg_at_k(self, oracle_rewards, gemini_rewards, k=None):
         """
         Compute NDCG@k treating oracle_rewards as ground truth relevances.
-        If k is None we use all trajectories.
+        Handles ties in gemini_rewards by averaging over all possible orderings.
         """
         if k is None:
             k = len(oracle_rewards)
-        # ideal DCG: sort oracle descending
-        ideal = sorted(oracle_rewards, reverse=True)[:k]
+        
+        # Normalize oracle_rewards to be non-negative
+        min_reward = min(oracle_rewards)
+        normalized_oracle = [r - min_reward for r in oracle_rewards]
+        
+        # Calculate ideal DCG
+        ideal = sorted(normalized_oracle, reverse=True)[:k]
+        
         def dcg(rs):
             return sum((2**r - 1) / np.log2(i+2) for i, r in enumerate(rs))
+        
         idcg = dcg(ideal)
-        # DCG of the gemini‐ranked list
-        order = np.argsort(gemini_rewards)[::-1][:k]
-        rels = [oracle_rewards[i] for i in order]
-        return dcg(rels) / idcg if idcg > 0 else 0.0
+        if idcg <= 0:
+            return 0.0
+        
+        # Group indices by their gemini_rewards value
+        score_to_indices = {}
+        for i, score in enumerate(gemini_rewards):
+            if score not in score_to_indices:
+                score_to_indices[score] = []
+            score_to_indices[score].append(i)
+        
+        # Calculate average NDCG over all possible orderings
+        from itertools import permutations
+        import random
+        
+        # Get unique scores in descending order
+        unique_scores = sorted(score_to_indices.keys(), reverse=True)
+        
+        # If there are too many permutations, sample a reasonable number
+        MAX_PERMS = 100  # Adjust as needed
+        
+        total_ndcg = 0.0
+        num_perms = 0
+        
+        # Generate permutations of index positions for each score group
+        pos_assignments = []
+        remaining_positions = list(range(len(oracle_rewards)))
+        
+        # Assign positions to each score group (higher scores get earlier positions)
+        for score in unique_scores:
+            indices = score_to_indices[score]
+            num_indices = len(indices)
+            
+            # Take positions from the beginning of remaining_positions
+            positions_for_this_score = remaining_positions[:num_indices]
+            remaining_positions = remaining_positions[num_indices:]
+            
+            # Generate permutations of indices within this score group
+            if len(indices) > 1:
+                # If too many permutations, sample randomly
+                all_perms = list(permutations(indices))
+                if len(all_perms) > MAX_PERMS:
+                    perms_to_use = random.sample(all_perms, MAX_PERMS)
+                else:
+                    perms_to_use = all_perms
+                
+                pos_assignments.append((positions_for_this_score, perms_to_use))
+            else:
+                # No permutation needed for a single item
+                pos_assignments.append((positions_for_this_score, [tuple(indices)]))
+        
+        # Calculate NDCG for each permutation combination
+        from itertools import product
+        
+        # Extract just the permutations for each score group
+        perm_lists = [perms for _, perms in pos_assignments]
+        
+        # Calculate total number of permutation combinations
+        total_perms = 1
+        for perms in perm_lists:
+            total_perms *= len(perms)
+        
+        # If too many total permutations, sample a subset
+        if total_perms > MAX_PERMS:
+            sampled_perms = 0
+            while sampled_perms < MAX_PERMS:
+                # Create a random ordering
+                ordering = [0] * len(oracle_rewards)
+                for (positions, perms) in pos_assignments:
+                    perm = random.choice(perms)
+                    for pos, idx in zip(positions, perm):
+                        if pos < k:  # Only care about positions within k
+                            ordering[pos] = idx
+                
+                # Calculate NDCG for this ordering
+                rels = [normalized_oracle[ordering[i]] for i in range(min(k, len(ordering)))]
+                total_ndcg += dcg(rels) / idcg
+                sampled_perms += 1
+            
+            return total_ndcg / sampled_perms
+        else:
+            # Generate all permutation combinations (reasonable number)
+            for perm_combination in product(*perm_lists):
+                # Create ordering based on this permutation combination
+                ordering = [0] * len(oracle_rewards)
+                for i, (positions, _) in enumerate(pos_assignments):
+                    for pos, idx in zip(positions, perm_combination[i]):
+                        if pos < k:  # Only care about positions within k
+                            ordering[pos] = idx
+                
+                # Calculate NDCG for this ordering
+                rels = [normalized_oracle[ordering[i]] for i in range(min(k, len(ordering)))]
+                total_ndcg += dcg(rels) / idcg
+                num_perms += 1
+            
+            return total_ndcg / num_perms if num_perms > 0 else 0.0
     
     def compare_rewards(self, oracle_reward, gemini_reward):
         """
@@ -347,7 +474,7 @@ class TwoSimulatorPlanner:
         return error
     
     
-    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    def plan_trajectory_base(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -484,7 +611,7 @@ class TwoSimulatorPlanner:
         return best_trajectory, best_final_reward
 
     
-    def plan_trajectory_grm(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -579,11 +706,13 @@ class TwoSimulatorPlanner:
                 
             # Compute final reward for this trajectory
             final_image = get_image_from_maniskill2_obs_dict(current_env, current_obs)
-            
-            final_reward = self.gemini_reward_function(start_image, final_image)
-            
+            # breakpoint()
+            final_reward = self.rewarder.get_reward(start_image, final_image, "")   # sending empty subtask
+            # breakpoint()
             # Compute final reward for this trajectory by oracle
             final_reward_oracle = self.compute_reward(current_env)
+            
+            print("FInal Reward from GRM:", final_reward)
             
             # error analysis
             error = self.compare_rewards(final_reward_oracle, final_reward)
@@ -608,16 +737,16 @@ class TwoSimulatorPlanner:
                     print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
         average_trajectory_error = tot_trajectory_error / num_trajectories
-        
+        # breakpoint()
         # Compute NDCG@k
         ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
-        
-        if self.verbose:
-            print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
+        # breakpoint()
+
         # Store the trajectory error for analysis
         self.ranking_error.append(ndcg_score)        
         self.point_wise_error.append(average_trajectory_error)
         print(f"Average trajectory error: {average_trajectory_error}")
+        print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
         print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
         # Calculate planning time
         planning_time = time.time() - start_time

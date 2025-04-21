@@ -129,7 +129,6 @@ if __name__ == "__main__":
         )
     else:
         raise NotImplementedError()
-    breakpoint()
     # run real-to-sim evaluation
     success_arr = maniskill2_evaluator(model, args)
     print(args)
