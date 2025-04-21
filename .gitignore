@@ -38,3 +38,5 @@ action_entropy*
 slurm*
 
 try.py
+
+simpler_env/reward_scripts/outputs

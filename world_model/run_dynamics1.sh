@@ -8,8 +8,8 @@
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=200G
 #SBATCH --time=3-00:00:00
-#SBATCH --constraint='L40S'
-#SBATCH --exclude='babel-14-25,babel-11-5,babel-1-23,babel-13-13'
+#SBATCH --constraint='6000Ada|L40S|A6000'
+#exclude='babel-14-25,babel-11-5,babel-1-23,babel-13-13'
 
 
 export NCCL_P2P_DISABLE=1

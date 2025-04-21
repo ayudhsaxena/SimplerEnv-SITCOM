@@ -3,7 +3,7 @@ policy_model=$2
 action_ensemble_temp=$3
 logging_dir=$4
 gpu_id=$5
-
+unnorm_key=$6
 
 scene_name=bridge_table_1_v1
 robot=widowx
