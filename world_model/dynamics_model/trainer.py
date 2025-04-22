@@ -7,8 +7,8 @@ from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import DistributedType
 from beartype import beartype
 
-from dynamics_model.data import DynamicsModelDataset, DynamicsModelAutoregressiveDataset
-from dynamics_model.optimizer import get_optimizer, get_optimizer_pretrained_init
+from .data import DynamicsModelDataset, DynamicsModelAutoregressiveDataset
+from .optimizer import get_optimizer, get_optimizer_pretrained_init
 from einops import rearrange
 from ema_pytorch import EMA
 import torch

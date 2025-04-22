@@ -8,6 +8,8 @@ import mediapy as media
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from scipy.ndimage import binary_dilation
+import cv2
+
 
 FONT_PATH = str(Path(__file__) / "fonts/UbuntuMono-R.ttf")
 
@@ -26,6 +28,26 @@ def write_video(path, images, fps=5):
     else:
         images_npy = images
     media.write_video(path, images_npy, fps=fps)
+
+def write_video_opencv(path, images, fps=5):
+    if not images:
+        return
+        
+    h, w, c = images[0].shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID' for .avi
+    
+    # Create video writer
+    out = cv2.VideoWriter(path, fourcc, fps, (w, h))
+    
+    # Write frames
+    for img in images:
+        # OpenCV uses BGR instead of RGB
+        if img.shape[2] == 3:  # if RGB
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        out.write(img)
+    
+    # Release resources
+    out.release()
 
 def write_interval_video(path, images, fps=5, interval=20):
     # images: list of numpy arrays

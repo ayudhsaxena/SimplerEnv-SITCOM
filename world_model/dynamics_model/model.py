@@ -1,6 +1,5 @@
 from pathlib import Path
-
-from dynamics_model.attention import ContinuousPositionBias, Transformer
+from .attention import ContinuousPositionBias, Transformer
 from einops import pack, rearrange, repeat
 from einops.layers.torch import Rearrange
 import lpips
@@ -140,7 +139,7 @@ class DynamicsModel(nn.Module):
         assert image.ndim == 4 and action.ndim == 2
         assert image.shape[0] == action.shape[0]
         b, c, *image_dims, device = *image.shape, image.device
-        assert tuple(image_dims) == self.image_size
+        assert tuple(image_dims) == self.image_size, f"Image size mismatch: expected {self.image_size}, got {image_dims}"
 
         tokens = self.to_patch_emb(image)
         action_tokens = self.to_action_emb(action)

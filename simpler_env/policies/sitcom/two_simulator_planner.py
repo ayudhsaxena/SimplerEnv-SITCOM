@@ -13,6 +13,10 @@ import cv2
 import uuid
 import json
 import pathlib
+import torch
+from world_model import DynamicsModel
+import time
+import matplotlib.pyplot as plt
 
 
 from simpler_env.utils.env.env_builder import (
@@ -180,16 +184,12 @@ class TwoSimulatorPlanner:
                 ),
             )
         
-        return env
+        return env, obs
         
 
-    def copy_state(self, state, kwargs, additional_env_build_kwargs):
+    def copy_state(self, state, kwargs, additional_env_build_kwargs, env_reset_options):
         if self.verbose:
             print("[TwoSimulatorPlanner] Creating environment copy")
-
-        episode_id = None
-        if hasattr(state, 'episode_id'):
-            episode_id = state.episode_id
         
         # Create a new environment instance with the same configuration
         from simpler_env.utils.env.env_builder import build_maniskill2_env
@@ -201,16 +201,8 @@ class TwoSimulatorPlanner:
             **kwargs,
         )
         
-        # Reset with the same options/state
-        reset_options = {
-            'seed': state._episode_seed if hasattr(state, '_episode_seed') else None,
-            'options': {
-                'episode_id': episode_id
-            }
-        }
-        
         # Reset the environment
-        state_copy.reset(**reset_options)
+        state_copy.reset(options=env_reset_options)
         
         # If the environment supports state saving/loading
         if hasattr(state, 'get_state') and hasattr(state_copy, 'set_state'):
@@ -236,6 +228,7 @@ class TwoSimulatorPlanner:
             print(f"[TwoSimulatorPlanner] Sampling {num_samples} actions")
         
         actions = []
+        raw_actions = []
         temperature = temperature if temperature is not None else self.temperature
         
         # Sample actions from the model
@@ -249,13 +242,14 @@ class TwoSimulatorPlanner:
                 temperature=temperature
             )
             actions.append(action)
+            raw_actions.append(raw_action)
             
             if self.verbose:
                 print(f"    - Action vector: {action['world_vector']}")
                 print(f"    - Rotation: {action['rot_axangle']}")
                 print(f"    - Gripper: {action['gripper']}")
         
-        return actions
+        return raw_actions, actions
     
     def simulate_action(self, state, action, kwargs, additional_env_build_kwargs):
         """
@@ -273,10 +267,6 @@ class TwoSimulatorPlanner:
             print(f"  - World vector: {action['world_vector']}")
             print(f"  - Rotation: {action['rot_axangle']}")
             print(f"  - Gripper: {action['gripper']}")
-        
-        # Create a copy of the state to avoid modifying the original
-        # state_copy = self.copy_state(state, kwargs, additional_env_build_kwargs)
-        
         # Simulate the action using the model (second simulator)
         # For ManiSkill2, we need to concatenate action components
         action_array = np.concatenate([
@@ -300,7 +290,7 @@ class TwoSimulatorPlanner:
         
         return state, reward, image, done
     
-    def compute_reward(self, state, image=None, action=None, trajectory_images=None, most_recent_reward=-1):
+    def compute_reward(self, state=None, image=None, action=None, trajectory_images=None):
         """
         Compute reward for a state-action pair.
         
@@ -320,330 +310,11 @@ class TwoSimulatorPlanner:
         reward_function_params = inspect.signature(self.reward_function).parameters
         
         if 'trajectory_images' in reward_function_params:
-            return self.reward_function(state, trajectory_images=trajectory_images)
+            return self.reward_function(trajectory_images=trajectory_images)
         elif 'image' in reward_function_params:
             return self.reward_function(state, image)
         else:
-            return self.reward_function(state, action)
-        
-    def select_best_actions(self, state, candidate_actions, num_best, kwargs, additional_env_build_kwargs):
-        """
-        Select the best actions based on the reward function.
-        
-        Args:
-            state: The current state
-            candidate_actions: List of candidate actions
-            num_best: Number of best actions to select
-            
-        Returns:
-            best_actions: List of best actions
-        """
-        if self.verbose:
-            print(f"[TwoSimulatorPlanner] Selecting best {num_best} actions from {len(candidate_actions)} candidates")
-        
-        # Compute rewards for all candidate actions
-        action_rewards = []
-        
-        for i, action in enumerate(candidate_actions):
-            if self.verbose:
-                print(f"  - Evaluating action {i+1}/{len(candidate_actions)}")
-            
-            # Simulate the action to get the next state
-            next_state, _, _, _ = self.simulate_action(state, action, kwargs, additional_env_build_kwargs)
-            
-            # Compute the reward for the resulting state
-            reward = self.compute_reward(next_state)
-            
-            if self.verbose:
-                print(f"    - Reward: {reward}")
-            
-            # Store the action and its reward
-            action_rewards.append((action, reward))
-        
-        # Sort by reward (descending) and select the best actions
-        action_rewards.sort(key=lambda x: x[1], reverse=True)
-        best_actions = [action for action, _ in action_rewards[:num_best]]
-        
-        if self.verbose:
-            print(f"[TwoSimulatorPlanner] Selected {len(best_actions)} best actions:")
-            for i, (action, reward) in enumerate(action_rewards[:num_best]):
-                print(f"  - Action {i+1}: reward={reward}")
-        
-        return best_actions
-    
-    def build_simulation_tree(self, root_state, root_image, task_description, kwargs, additional_env_build_kwargs):
-        """
-        Build a simulation tree by exploring possible actions.
-        
-        Args:
-            root_state: The initial state
-            root_image: The initial image
-            task_description: The task description
-            
-        Returns:
-            best_action: The best action to take
-        """
-        if self.verbose:
-            print(f"[TwoSimulatorPlanner] Building simulation tree for task: {task_description}")
-            print(f"  - Sampling {self.num_initial_actions} initial actions (A parameter)")
-        
-        # Create the root node
-        root_node = SimulationNode(root_state, root_image)
-        
-        # Sample initial actions (A = num_initial_actions)
-        initial_actions = self.sample_actions_from_model(
-            root_image, 
-            task_description, 
-            self.num_initial_actions,
-            temperature=self.temperature
-        )
-        
-        best_leaf_node = None
-        best_reward = float('-inf')
-        
-        # For each initial action, simulate and build a subtree
-        for i, action in enumerate(initial_actions):
-            if self.verbose:
-                print(f"\n[TwoSimulatorPlanner] Exploring initial action {i+1}/{len(initial_actions)}")
-            
-            # Simulate the action to get the next state
-            next_state, reward, next_image, done = self.simulate_action(root_state, action, kwargs, additional_env_build_kwargs)
-            
-            # Create a child node
-            child_node = SimulationNode(
-                next_state, 
-                next_image, 
-                parent=root_node, 
-                action=action, 
-                reward=reward,
-                depth=1
-            )
-            child_node.original_action_idx = i  # Keep track of which initial action this is
-            root_node.add_child(child_node)
-            
-            if self.verbose:
-                print(f"  - Initial simulation reward: {reward}")
-                print(f"  - Task completed: {done}")
-            
-            # Explore this subtree further if not done
-            if not done:
-                if self.verbose:
-                    print(f"  - Looking ahead {self.num_steps_ahead} steps")
-                
-                # Perform look-ahead simulation (h = num_steps_ahead)
-                leaf_node = self._simulate_ahead(
-                    child_node, 
-                    task_description,
-                    kwargs,
-                    additional_env_build_kwargs ,
-                    current_depth=1
-                )
-                
-                if self.verbose:
-                    print(f"  - Best leaf node reward: {leaf_node.reward}")
-                
-                # Update best leaf node if better reward
-                if leaf_node.reward > best_reward:
-                    best_reward = leaf_node.reward
-                    best_leaf_node = leaf_node
-                    
-                    if self.verbose:
-                        print(f"  - New best reward found: {best_reward}")
-            
-            # If done but reward is better than current best
-            elif child_node.reward > best_reward:
-                best_reward = child_node.reward
-                best_leaf_node = child_node
-                
-                if self.verbose:
-                    print(f"  - Task completed with reward: {best_reward}")
-        
-        # Store the tree and best trajectory
-        self.simulation_tree = root_node
-        self.best_reward = best_reward
-        
-        # Backtrack to find the best initial action
-        if best_leaf_node:
-            self.best_trajectory = self._backtrack_to_root(best_leaf_node)
-            best_initial_action = initial_actions[best_leaf_node.original_action_idx]
-            
-            if self.verbose:
-                print(f"\n[TwoSimulatorPlanner] Selected best initial action with index {best_leaf_node.original_action_idx}")
-                print(f"  - Best reward: {best_reward}")
-                print(f"  - World vector: {best_initial_action['world_vector']}")
-                print(f"  - Rotation: {best_initial_action['rot_axangle']}")
-                print(f"  - Gripper: {best_initial_action['gripper']}")
-            
-            return best_initial_action
-        
-        # Fallback to the first action if no simulation was successful
-        if self.verbose:
-            print(f"\n[TwoSimulatorPlanner] No good action found, falling back to first action")
-        
-        return initial_actions[0] if initial_actions else None
-    
-    def _simulate_ahead(self, node, task_description, kwargs, additional_env_build_kwargs, current_depth=1):
-        """
-        Recursively simulate ahead from a node.
-        
-        Args:
-            node: The current node
-            task_description: The task description
-            current_depth: Current depth in the tree
-            
-        Returns:
-            best_leaf: The best leaf node in this subtree
-        """
-        # If we've reached the maximum depth or this is a terminal state, return this node
-        if current_depth >= self.num_steps_ahead or node.reward == float('inf'):
-            if self.verbose:
-                print(f"    [Depth {current_depth}] Reached max depth or terminal state, stopping")
-            return node
-        
-        if self.verbose:
-            print(f"    [Depth {current_depth}] Simulating ahead, sampling {self.num_candidates} candidates")
-        
-        # Sample candidate actions from this state (typically more than we'll use)
-        candidate_actions = self.sample_actions_from_model(
-            node.image, 
-            task_description, 
-            self.num_candidates
-        )
-        
-        # Select the best candidate actions
-        best_actions = self.select_best_actions(
-            node.state, 
-            candidate_actions, 
-            self.num_best_actions, kwargs, additional_env_build_kwargs
-        )
-        
-        best_leaf = node
-        best_reward = node.reward
-        
-        # Explore each of the best actions
-        for i, action in enumerate(best_actions):
-            if self.verbose:
-                print(f"    [Depth {current_depth}] Exploring action {i+1}/{len(best_actions)}")
-            
-            # Simulate the action
-            next_state, reward, next_image, done = self.simulate_action(node.state, action, kwargs, additional_env_build_kwargs)
-            
-            if self.verbose:
-                print(f"      - Step reward: {reward}")
-                print(f"      - Cumulative reward: {node.reward + reward}")
-                print(f"      - Done: {done}")
-            
-            # Create a child node with cumulative reward
-            child_node = SimulationNode(
-                next_state, 
-                next_image, 
-                parent=node, 
-                action=action, 
-                reward=node.reward + reward,  # Accumulate rewards along the path
-                depth=current_depth + 1
-            )
-            child_node.original_action_idx = node.original_action_idx  # Propagate original action index
-            node.add_child(child_node)
-            
-            # Continue simulation if not done
-            if not done:
-                leaf_node = self._simulate_ahead(
-                    child_node, 
-                    task_description, 
-                    kwargs, additional_env_build_kwargs,
-                    current_depth + 1
-                )
-                
-                # Update best leaf if needed
-                if leaf_node.reward > best_reward:
-                    if self.verbose:
-                        print(f"      - New best leaf found with reward: {leaf_node.reward}")
-                    best_reward = leaf_node.reward
-                    best_leaf = leaf_node
-            
-            # If done but reward is better than current best
-            elif child_node.reward > best_reward:
-                if self.verbose:
-                    print(f"      - Task completed with better reward: {child_node.reward}")
-                best_reward = child_node.reward
-                best_leaf = child_node
-        
-        if self.verbose:
-            print(f"    [Depth {current_depth}] Best reward in subtree: {best_reward}")
-        
-        return best_leaf
-    
-    def _backtrack_to_root(self, node):
-        """
-        Backtrack from a leaf node to the root to find the trajectory.
-        
-        Args:
-            node: The leaf node
-            
-        Returns:
-            trajectory: List of (state, action) pairs from root to leaf
-        """
-        trajectory = []
-        current = node
-        
-        # Traverse up the tree from leaf to root
-        while current.parent:
-            trajectory.append((current.parent.state, current.action))
-            current = current.parent
-        
-        # Reverse to get from root to leaf
-        trajectory.reverse()
-        return trajectory
-    
-    def plan(self, env, image, task_description, kwargs, additional_env_build_kwargs):
-        """
-        Plan the best action to take from the current state.
-        
-        Args:
-            env: The current environment state (first simulator)
-            image: The current image observation
-            task_description: Optional updated task description
-            
-        Returns:
-            best_action: The best action to take
-        """
-        if self.verbose:
-            print("\n" + "="*80)
-            print(f"[TwoSimulatorPlanner] Starting planning process")
-            print("="*80)
-        
-        # Update task description if provided
-        if task_description is not None:
-            if self.verbose:
-                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
-            self.task_description = task_description
-            self.model.reset(task_description)
-        
-        # Record time for performance monitoring
-        import time
-        start_time = time.time()
-
-
-        # print('env plan = ', env_name)
-        
-        
-        # print('env plan = ', env_name)
-        
-        # Build simulation tree and get the best action
-        best_action = self.build_simulation_tree(env, image, self.task_description, kwargs, additional_env_build_kwargs)
-        
-        # Calculate planning time
-        planning_time = time.time() - start_time
-        
-        if self.verbose:
-            print(f"[TwoSimulatorPlanner] Planning completed in {planning_time:.2f} seconds")
-            print(f"[TwoSimulatorPlanner] Selected action:")
-            print(f"  - World vector: {best_action['world_vector']}")
-            print(f"  - Rotation: {best_action['rot_axangle']}")
-            print(f"  - Gripper: {best_action['gripper']}")
-            print("="*80 + "\n")
-        
-        return best_action
+            return self.reward_function(state)
     
     def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5, rewards_history=None):
         """
@@ -744,7 +415,7 @@ class TwoSimulatorPlanner:
                         print(f"  - Task completed after {step+1} steps")
                     break
             # Compute final reward for this trajectory
-            metrics = self.compute_reward(current_env, trajectory_images=trajectory_images)
+            metrics = self.compute_reward(trajectory_images=trajectory_images)
             if metrics is None :
                 metrics = most_recent_metric
             final_reward = metrics['reward']
@@ -774,6 +445,325 @@ class TwoSimulatorPlanner:
         
         return best_trajectory or [], best_metrics  # Return empty list if no trajectory was found, plus the best reward
     
+    def load_world_model(self):
+        """
+        Load the world model for simulation.
+        """
+        
+        # Initialize the world model
+        self.world_model = DynamicsModel(
+            dim=768,
+            image_size=224,
+            patch_size=14,
+            spatial_depth=8,
+            dim_head=64,
+            heads=16,
+            use_lpips_loss=True,
+        )
+        
+        # Load the model checkpoint
+        pretrain_ckpt = "/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/results/dyna1_simpl_ft_1/vae.pt"
+        ckpt = torch.load(pretrain_ckpt, map_location="cpu")["model"]
+        self.world_model.load_state_dict(ckpt)
+        
+        # Move the model to GPU if available
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.world_model = self.world_model.to(self.device)
+        self.world_model.eval()
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] World model loaded successfully to {self.device}")
+
+    def prepare_image_for_world_model(self, image, image_size=(224, 224)):
+        """
+        Convert an image to a tensor suitable for the world model and resize it.
+        
+        Args:
+            image: The image to convert (numpy array or tensor)
+            image_size: Target size to resize the image to as a tuple (height, width) (default: (224, 224))
+            
+        Returns:
+            image_tensor: The resized image as a tensor on the correct device
+        """
+        import torch
+        import torch.nn.functional as F
+        import numpy as np
+        
+        if isinstance(image, np.ndarray):
+            # Image is a numpy array, convert to tensor
+            if image.ndim == 3 and image.shape[2] == 3:  # HWC format
+                image_tensor = torch.from_numpy(image).permute(2, 0, 1).float()  # Convert to CHW
+            else:
+                # Already in CHW format
+                image_tensor = torch.from_numpy(image).float()
+        else:
+            # Image is already a tensor
+            image_tensor = image.float()
+        
+        # Ensure proper dimensions
+        if image_tensor.dim() == 3:
+            image_tensor = image_tensor.unsqueeze(0)  # Add batch dimension
+        
+        # Resize the image to the target size
+        if image_tensor.shape[-2] != image_size[0] or image_tensor.shape[-1] != image_size[1]:
+            image_tensor = F.interpolate(
+                image_tensor, 
+                size=image_size, 
+                mode='bilinear', 
+                align_corners=False
+            )
+        
+        # Move to the correct device
+        image_tensor = image_tensor.to(self.device)
+        
+        return image_tensor
+
+    def prepare_action_for_world_model(self, action):
+        """
+        Convert an action to a tensor suitable for the world model.
+        
+        Args:
+            action: The action dictionary with 'world_vector', 'rot_axangle', and 'gripper' keys
+            
+        Returns:
+            action_tensor: The action as a tensor on the correct device
+        """
+        
+        # Extract the components and concatenate them
+        action_list = (
+            action["world_vector"].tolist() + 
+            action["rotation_delta"].tolist() + 
+            action["open_gripper"].tolist()
+        )
+
+        self.action_mean = torch.tensor([
+            0.00023341893393080682,
+            0.0001300494186580181,
+            -0.0001276240509469062,
+            -0.00015565630747005343,
+            -0.0004039352061226964,
+            0.00023557755048386753,
+            0.5764579772949219
+        ], dtype=torch.float32, device=self.device).reshape(-1)
+        self.action_std = torch.tensor([
+            0.009765958413481712,
+            0.01368918176740408,
+            0.012667348608374596,
+            0.02853415347635746,
+            0.03063797391951084,
+            0.07691441476345062,
+            0.4973689615726471
+        ], dtype=torch.float32, device=self.device).reshape(-1)
+        # Convert to tensor
+        action_tensor = torch.tensor(action_list, dtype=torch.float32, device=self.device)
+        action_tensor = (action_tensor - self.action_mean) / self.action_std
+        
+        return action_tensor
+
+    def simulate_batch_with_world_model(self, images, actions):
+        """
+        Simulate a batch of actions using the world model.
+        
+        Args:
+            images: List of current images (numpy arrays or tensors)
+            actions: List of actions to simulate
+            
+        Returns:
+            next_images: List of predicted next images (in the same format as the input)
+        """
+        
+        # Determine if images are numpy arrays or tensors
+        is_numpy = isinstance(images[0], np.ndarray)
+        
+        # Convert all images to tensors
+        image_tensors = [self.prepare_image_for_world_model(img) for img in images]
+        image_tensor_batch = torch.cat(image_tensors, dim=0)
+        # Convert all actions to tensors
+        action_tensors = [self.prepare_action_for_world_model(action) for action in actions]
+        action_tensor_batch = torch.stack(action_tensors)
+         
+        # Predict the next images
+        with torch.no_grad():
+            next_image_tensor_batch = self.world_model(image_tensor_batch, action_tensor_batch, None, return_recons_only=True)
+        
+        
+        # Convert back to the original format
+        if is_numpy:
+            next_images = [(tensor.to(torch.float32).cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8) for tensor in next_image_tensor_batch]
+        else:
+            next_images = [tensor.to(torch.float32).squeeze(0) for tensor in next_image_tensor_batch]
+        # breakpoint()
+        return next_images
+
+    def plan_trajectory_with_world_model(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5, rewards_history=None):
+        """
+        Plan and evaluate multiple trajectories using a world model instead of a simulator.
+        
+        Args:
+            env_name: The environment name
+            action_list: List of actions taken so far
+            env_reset_options: Options for environment reset
+            image: The current image observation
+            task_description: The task description
+            kwargs: Additional arguments for environment building
+            additional_env_build_kwargs: Additional environment building arguments
+            trajectory_length: The number of actions to include in each trajectory
+            num_trajectories: Number of different trajectories to evaluate
+            rewards_history: List of rewards from previous best trajectories
+            
+        Returns:
+            tuple: (best_trajectory, best_metrics)
+                - best_trajectory: List of actions forming the best trajectory
+                - best_metrics: The metrics achieved by the best trajectory, including reward
+        """
+ 
+        
+        if self.verbose:
+            print("\n" + "="*80)
+            print(f"[TwoSimulatorPlanner] Starting trajectory planning with world model")
+            print(f"[TwoSimulatorPlanner] Evaluating {num_trajectories} trajectories of length {trajectory_length}")
+            print("="*80)
+        
+        # Update task description if provided
+        if task_description is not None:
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
+            self.task_description = task_description
+            self.model.reset(task_description)
+        
+        # Record time for performance monitoring
+        start_time = time.time()
+        
+        # Load the world model if not already loaded
+        if not hasattr(self, 'world_model'):
+            self.load_world_model()
+        
+        current_env, obs = self.get_to_state(env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs)
+        # Track best trajectory and its metrics
+        best_trajectory = None
+        best_metrics = {
+            'reward': float('-inf'),
+        }
+        most_recent_metric = {'reward': -1}
+        if rewards_history and len(rewards_history) > 0:
+            most_recent_metric = copy.deepcopy(rewards_history[-1])
+        
+        # Generate trajectories with batch processing
+        batch_size = min(num_trajectories, 10)  # Process in smaller batches to avoid OOM
+        all_trajectories = []
+        
+        for batch_start in range(0, num_trajectories, batch_size):
+            batch_end = min(batch_start + batch_size, num_trajectories)
+            batch_size_actual = batch_end - batch_start
+            
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Processing trajectories {batch_start+1}-{batch_end} (batch size {batch_size_actual})")
+            
+            # Initialize trajectories for this batch
+            batch_trajectory_actions = [[] for _ in range(batch_size_actual)]
+            batch_trajectory_images = [[image] for _ in range(batch_size_actual)]
+            
+            # Start with the same initial image for all trajectories
+            current_images = [image] * batch_size_actual
+            
+            # Generate trajectories step by step
+            for step in range(trajectory_length):
+                if self.verbose:
+                    print(f"  - Planning step {step+1}/{trajectory_length}")
+                
+                # Sample actions for each trajectory in the batch
+                batch_actions = []
+                raw_batch_actions = []
+                for i in range(batch_size_actual):
+                    raw_actions, actions = self.sample_actions_from_model(
+                        current_images[i],
+                        self.task_description,
+                        num_samples=1,
+                        temperature=self.temperature
+                    )
+                    
+                    if not actions:
+                        batch_actions.append(None)
+                    else:
+                        action = actions[0]
+                        raw_action = raw_actions[0]
+                        batch_trajectory_actions[i].append(action)
+                        raw_batch_actions.append(raw_action)
+
+                # Filter out trajectories with invalid actions
+                valid_indices = [i for i, action in enumerate(raw_batch_actions) if action is not None]
+                if not valid_indices:
+                    if self.verbose:
+                        print("  - No valid actions sampled, ending step early")
+                    break
+                
+                # Prepare batch for world model simulation
+                valid_images = [current_images[i] for i in valid_indices]
+                valid_actions = [raw_batch_actions[i] for i in valid_indices]
+                
+                # Simulate all valid actions in a batch
+                next_images = self.simulate_batch_with_world_model(valid_images, valid_actions)
+                
+                # Update states for trajectories with valid actions
+                for j, i in enumerate(valid_indices):
+                    current_images[i] = next_images[j]
+                    batch_trajectory_images[i].append(next_images[j])
+            
+            # Append the completed trajectories to the overall list
+            for i in range(batch_size_actual):
+                all_trajectories.append((batch_trajectory_actions[i], batch_trajectory_images[i]))
+                
+        best_traj_images = all_trajectories[0][1]
+        # Evaluate all trajectories
+        for traj_idx, (trajectory_actions, trajectory_images) in enumerate(all_trajectories):
+            # Skip empty trajectories
+            if not trajectory_actions:
+                continue
+
+            eval_env, _ = self.get_to_state(env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs)
+
+            # Execute the trajectory in the actual simulator to get the final state
+            for action in trajectory_actions:
+                eval_env, _, _, _ = self.simulate_action(
+                    eval_env, action, kwargs, additional_env_build_kwargs
+                )
+ 
+            metrics = self.compute_reward(eval_env)
+            # # Compute metrics for this trajectory
+            # metrics = self.compute_reward(trajectory_images=trajectory_images)
+            if metrics is None:
+                metrics = most_recent_metric
+            final_reward = metrics['reward']
+            metrics['image'] = trajectory_images[-1]
+            
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
+            
+            print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
+            
+            # Update best trajectory if this one is better
+            if final_reward > best_metrics['reward']:
+                best_trajectory = trajectory_actions
+                best_traj_images = trajectory_images
+                best_metrics = metrics
+                if self.verbose:
+                    print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
+        
+        print(f"Best trajectory has {len(best_trajectory or [])} actions with final reward: {best_metrics['reward']}")
+        #self.save_metrics_metrics_for_best_trajectory(best_metrics)
+        current_image = get_image_from_maniskill2_obs_dict(current_env, obs)
+        eval_env, _ = self.get_to_state(env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs)
+        sim_images = [current_image] + self.get_simulator_rollout_images(eval_env, best_trajectory, kwargs, additional_env_build_kwargs, env_reset_options)
+        self.save_trajectory_images(best_trajectory, best_traj_images, sim_images, os.path.join(self.logging_dir, "planning", f"episode_{self.episode_id}"))
+        # Calculate planning time
+        planning_time = time.time() - start_time
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")
+            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory or [])} actions with final reward: {best_metrics['reward']}")
+            print("="*80 + "\n")
+        
+        return best_trajectory or [], best_metrics  # Return empty list if no trajectory was found, plus the best metrics
     def save_metrics_metrics_for_best_trajectory(self,metrics):
         image = metrics['image']
         if image is None:
@@ -845,7 +835,94 @@ class TwoSimulatorPlanner:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
 
+    def save_trajectory_images(self, best_traj_actions, wm_images, sim_images, output_dir=None):
 
+        # Generate unique identifiers
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(output_dir, timestamp)
+        os.makedirs(output_dir, exist_ok=True)
+
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Saving trajectory visualizations to {output_dir}")
+    
+        # Save simulator images as a horizontal strip
+        if sim_images and len(sim_images) > 0:
+            # Create horizontal strip of simulator images
+            fig, axes = plt.subplots(1, len(sim_images), figsize=(len(sim_images) * 4, 4))
+            if len(sim_images) == 1:
+                axes = [axes]  # Make iterable for single image case
+            
+            for i, (ax, img) in enumerate(zip(axes, sim_images)):
+                if img is not None:
+                    # Convert if tensor
+                    if torch.is_tensor(img):
+                        img = img.detach().cpu().numpy()
+                    # Handle different formats
+                    if img.shape[0] == 3:  # CHW format
+                        img = np.transpose(img, (1, 2, 0))
+                    
+                    ax.imshow(img.astype(np.uint8))
+                    ax.set_title(f"Step {i}")
+                    ax.axis('off')
+            
+            plt.tight_layout()
+            strip_path = os.path.join(output_dir, "simulator_trajectory_strip.png")
+            plt.savefig(strip_path)
+            plt.close(fig)
+        
+        # Save world model images as a horizontal strip
+        if wm_images and len(wm_images) > 0:
+            fig, axes = plt.subplots(1, len(wm_images), figsize=(len(wm_images) * 4, 4))
+            if len(wm_images) == 1:
+                axes = [axes]  # Make iterable for single image case
+            
+            for i, (ax, img) in enumerate(zip(axes, wm_images)):
+                if img is not None:
+                    # Convert if tensor
+                    if torch.is_tensor(img):
+                        img = img.detach().cpu().numpy()
+                    # Handle different formats
+                    if img.shape[0] == 3:  # CHW format
+                        img = np.transpose(img, (1, 2, 0))
+                    
+                    ax.imshow(img.astype(np.uint8))
+                    ax.set_title(f"Step {i}")
+                    ax.axis('off')
+            
+            plt.tight_layout()
+            strip_path = os.path.join(output_dir, "world_model_trajectory_strip.png")
+            plt.savefig(strip_path)
+            plt.close(fig)
+
+        # Save action metadata
+        if best_traj_actions:
+            action_file = os.path.join(output_dir, "actions.json")
+            with open(action_file, 'w') as f:
+                # Convert numpy arrays to lists for JSON serialization
+                serializable_actions = []
+                for action in best_traj_actions:
+                    serializable_action = {
+                        "world_vector": action["world_vector"].tolist(),
+                        "rot_axangle": action["rot_axangle"].tolist(),
+                        "gripper": action["gripper"].tolist()
+                    }
+                    serializable_actions.append(serializable_action)
+                json.dump(serializable_actions, f, indent=2)
+
+    def get_simulator_rollout_images(self, eval_env, trajectory_actions, kwargs, additional_env_build_kwargs, env_reset_options):
+        # Create a copy of the environment for final reward evaluation
+        
+        images = []
+        # Execute the trajectory in the actual simulator to get the final state
+        for action in trajectory_actions:
+            eval_env, _, image, _ = self.simulate_action(
+                eval_env, action, kwargs, additional_env_build_kwargs
+            )
+            images.append(image)
+        
+        return images
+        
+        # Compute metrics for this trajectory
     def debug_trajectory_planning(self, env, image, task_description, kwargs, additional_env_build_kwargs, dummy):
         """
         Debug method to test if environment copying and simulation work correctly

@@ -14,8 +14,9 @@ from simpler_env.utils.env.env_builder import (
     get_robot_control_mode,
 )
 from simpler_env.utils.env.observation_utils import get_image_from_maniskill2_obs_dict
-from simpler_env.utils.visualization import write_interval_video, write_video
+from simpler_env.utils.visualization import write_interval_video, write_video, write_video_opencv
 from simpler_env.policies.sitcom.reward_functions import *
+import cv2
 
 
 
@@ -147,6 +148,11 @@ def run_maniskill2_eval_single_episode(
     task_descriptions = []
     while not (predicted_terminated or truncated):
         # step the model; "raw_action" is raw model action output; "action" is the processed action to be sent into maniskill env
+         # Save individual image to directory
+        if timestep == 0:  # Create directory on first frame
+            frames_dir = os.path.join(logging_dir, "frames", scene_name, env_name, f"episode_{obj_episode_id}")
+            os.makedirs(frames_dir, exist_ok=True)
+        cv2.imwrite(os.path.join(frames_dir, f"frame_{timestep:04d}.png"), image[:, :, ::-1])  # Convert RGB to BGR for OpenCV
         if isinstance(model, SITCOMInference):
             # For SITCOM, we need to pass the environment to the step method
             raw_action, action = model.step(image, task_description, env_name, action_list, env_reset_options,  kwargs, additional_env_build_kwargs)
@@ -180,8 +186,6 @@ def run_maniskill2_eval_single_episode(
             ),
         )
         
-
-
         success = "success" if done else "failure"
         new_task_description = env.get_language_instruction()
         if new_task_description != task_description:
@@ -194,6 +198,7 @@ def run_maniskill2_eval_single_episode(
         image = get_image_from_maniskill2_obs_dict(
             env, obs, camera_name=obs_camera_name
         )
+       
         images.append(image)
         task_descriptions.append(task_description)
         if success == "success":
@@ -225,7 +230,7 @@ def run_maniskill2_eval_single_episode(
     r, p, y = quat2euler(robot_init_quat)
     video_path = f"{scene_name}/{control_mode}/{env_save_name}/rob_{robot_init_x}_{robot_init_y}_rot_{r:.3f}_{p:.3f}_{y:.3f}_rgb_overlay_{rgb_overlay_path_str}/{video_name}"
     video_path = os.path.join(logging_dir, video_path)
-    write_video(video_path, images, fps=5)
+    write_video_opencv(video_path, images, fps=5)
 
     # save action trajectory
     action_path = video_path.replace(".mp4", ".png")

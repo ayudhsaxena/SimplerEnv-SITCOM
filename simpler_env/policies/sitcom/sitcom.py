@@ -23,8 +23,10 @@ class SITCOMInference:
         logging_dir="./results/planning",
         policy_setup: str = "widowx_bridge",
         action_scale: float = 1.0,
-        trajectory_length: int = 10,  # New parameter for trajectory length
-        max_history_size: int = 10,  # Maximum number of trajectory rewards to store
+        trajectory_length: int = 10,
+        max_history_size: int = 10,
+        use_world_model: bool = True,  # New parameter to toggle world model usage
+        world_model_path: str = "/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/results/dyna1_simpl_ft_1/vae.pt",  # Path to world model
     ):
         """
         Initialize the wrapper for the planning model.
@@ -44,6 +46,8 @@ class SITCOMInference:
             action_scale: Scaling factor for actions
             trajectory_length: Length of trajectory to request from planner
             max_history_size: Maximum number of trajectory rewards to store
+            use_world_model: Whether to use the world model for planning
+            world_model_path: Path to the world model checkpoint
         """
         # Create the planner
         self.planner = TwoSimulatorPlanner(
@@ -67,10 +71,13 @@ class SITCOMInference:
         self.action_buffer = deque()  # Buffer to store trajectory actions
         self.trajectory_length = trajectory_length
         
-        # New: Track the rewards history for best trajectories
+        # Track the rewards history for best trajectories
         self.trajectory_rewards_history = []
         self.max_history_size = max_history_size
-    
+        
+        # World model configuration
+        self.use_world_model = use_world_model
+        self.world_model_path = world_model_path
     def reset(self, task_description: str, episode_id: int) -> None:
         """
         Reset the model with a new task description.
@@ -110,17 +117,32 @@ class SITCOMInference:
         # Check if buffer is empty
         if not self.action_buffer:
             # Get a new trajectory from the planner
-            trajectory, best_metrics = self.planner.plan_trajectory(
-                current_env_name,
-                action_list,
-                env_reset_options,
-                image, 
-                task_description, 
-                kwargs, 
-                additional_env_build_kwargs,
-                self.trajectory_length,
-                rewards_history=self.trajectory_rewards_history  # Pass the rewards history
-            )
+            if self.use_world_model:
+                # Use world model-based planning
+                trajectory, best_metrics = self.planner.plan_trajectory_with_world_model(
+                    current_env_name,
+                    action_list,
+                    env_reset_options,
+                    image, 
+                    task_description, 
+                    kwargs, 
+                    additional_env_build_kwargs,
+                    self.trajectory_length,
+                    rewards_history=self.trajectory_rewards_history
+                )
+            else:
+                # Use simulator-based planning
+                trajectory, best_metrics = self.planner.plan_trajectory(
+                    current_env_name,
+                    action_list,
+                    env_reset_options,
+                    image, 
+                    task_description, 
+                    kwargs, 
+                    additional_env_build_kwargs,
+                    self.trajectory_length,
+                    rewards_history=self.trajectory_rewards_history
+                )
             
             # Update rewards history with the best reward from this planning cycle
             self.trajectory_rewards_history.append(best_metrics)
@@ -163,6 +185,7 @@ class SITCOMInference:
         }
         
         return raw_action, best_action
+
     
     def visualize_epoch(self, actions, images, save_path=None):
         """

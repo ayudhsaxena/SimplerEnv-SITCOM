@@ -96,7 +96,7 @@ if __name__ == "__main__":
             print(f"Getting reward function for {env_name}")
             
             if "PutCarrotOnPlateInScene" in env_name:
-                return reward_for_put_carrot_on_plate_with_image
+                return reward_for_put_carrot_on_plate
             elif "StackGreenOnYellowInScene" in env_name:
                 return reward_for_stack_green_on_yellow
             elif "PutEggplantInBasketInScene" in env_name:
@@ -108,7 +108,6 @@ if __name__ == "__main__":
                 print(f"Unknown environment name: {env_name}. Using default reward function.")
                 return reward_for_put_carrot_on_plate_with_image
 
-            
         reward_function = get_reward_function(args.env_name)
         
         model = SITCOMInference(
