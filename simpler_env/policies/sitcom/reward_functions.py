@@ -140,8 +140,7 @@ def reward_for_put_eggplant_in_basket(state, action=None):
     """Reward function for putting an eggplant in a basket."""
     # Note: For eggplant in basket, evaluate uses success_require_src_completely_on_target=False
     # and z_flag_required_offset=0.06
-    eval_results = state.evaluate(success_require_src_completely_on_target=False, 
-                                    z_flag_required_offset=0.06)
+    eval_results = state.evaluate()
     
     # Extract important information
     is_grasped = eval_results['is_src_obj_grasped']

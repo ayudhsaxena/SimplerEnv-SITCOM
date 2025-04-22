@@ -278,6 +278,13 @@ class GeneralRewarder:
         
         # Add the subtask for reference
         result["subtask"] = subtask
+        
+        # if result["reward"] >=0 and result["reward"] <=5:
+        #     return result["reward"]
+        # else:
+        #     print(f"Invalid reward value: {result['reward']}. Defaulting to 0.")
+        #     # breakpoint()
+        #     result["reward"] = 0
 
         return result['reward']
 

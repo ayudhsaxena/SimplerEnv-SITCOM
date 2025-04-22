@@ -99,7 +99,7 @@ if __name__ == "__main__":
                 return reward_for_put_carrot_on_plate
             elif "StackGreenOnYellowInScene" in env_name:
                 return reward_for_stack_green_on_yellow
-            elif "PutEggplantInBasketInScene" in env_name:
+            elif "PutEggplantInBasketScene" in env_name:
                 return reward_for_put_eggplant_in_basket
             elif "PutSpoonOnTableclothInScene" in env_name:
                 return reward_for_put_spoon_on_tablecloth
