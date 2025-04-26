@@ -34,7 +34,7 @@ class TwoSimulatorPlanner:
         horizon_per_action=5,    # Horizon parameter
         num_steps_ahead=3,       # h parameter
         num_candidates=5,        # Number of candidate actions to sample
-        num_best_actions=3,      # Number of best actions to select
+        trajectory_length=10,      # Number of best actions to select
         temperature=1.0,         # Temperature for sampling
         render_tree=False,       # Whether to render the tree
         logging_dir="./results/planning",
@@ -85,7 +85,7 @@ class TwoSimulatorPlanner:
         self.horizon_per_action = horizon_per_action    # Horizon
         self.num_steps_ahead = num_steps_ahead          # h
         self.num_candidates = num_candidates
-        self.num_best_actions = num_best_actions
+        self.trajectory_length = trajectory_length
         self.temperature = temperature
         
         # Visualization settings
@@ -121,7 +121,7 @@ class TwoSimulatorPlanner:
             print(f"  - Horizon per action: {horizon_per_action}")
             print(f"  - Steps ahead (h): {num_steps_ahead}")
             print(f"  - Candidates: {num_candidates}")
-            print(f"  - Best actions: {num_best_actions}")
+            print(f"  - Trajectory length: {trajectory_length}")
             print(f"  - Temperature: {temperature}")
             print(f"  - Policy setup: {policy_setup}")
             print(f"  - Action scale: {action_scale}")
@@ -474,7 +474,7 @@ class TwoSimulatorPlanner:
         return error
     
     
-    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -485,7 +485,7 @@ class TwoSimulatorPlanner:
             kwargs: Additional arguments for environment building
             additional_env_build_kwargs: Additional environment building arguments
             trajectory_length: The number of actions to include in each trajectory
-            num_trajectories: Number of different trajectories to evaluate
+            num_candidates: Number of different trajectories to evaluate
             
         Returns:
             best_trajectory: List of actions forming the best trajectory
@@ -493,7 +493,7 @@ class TwoSimulatorPlanner:
         if self.verbose:
             print("\n" + "="*80)
             print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
-            print(f"[TwoSimulatorPlanner] Evaluating {num_trajectories} trajectories of length {trajectory_length}")
+            print(f"[TwoSimulatorPlanner] Evaluating {self.num_candidates} trajectories of length {self.trajectory_length}")
             print("="*80)
         
         # Update task description if provided
@@ -517,9 +517,9 @@ class TwoSimulatorPlanner:
         gemini_rewards = []
         
         # Generate and evaluate multiple trajectories
-        for traj_idx in range(num_trajectories):
+        for traj_idx in range(self.num_candidates):
             if self.verbose:
-                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{num_trajectories}")
+                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{self.num_candidates}")
             
             # Initialize trajectory for this run
             trajectory_actions = []
@@ -529,9 +529,9 @@ class TwoSimulatorPlanner:
             current_image = image
             
             # Generate a sequence of actions for this trajectory
-            for step in range(trajectory_length):
+            for step in range(self.trajectory_length):
                 if self.verbose:
-                    print(f"  - Planning step {step+1}/{trajectory_length}")
+                    print(f"  - Planning step {step+1}/{self.trajectory_length}")
                 
                 # Sample actions from the model with temperature to ensure diversity
                 actions = self.sample_actions_from_model(
@@ -588,7 +588,7 @@ class TwoSimulatorPlanner:
                 if self.verbose:
                     print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
-        # average_trajectory_error = tot_trajectory_error / num_trajectories
+        # average_trajectory_error = tot_trajectory_error / num_candidates
         
         # Compute NDCG@k
         # ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
@@ -611,7 +611,7 @@ class TwoSimulatorPlanner:
         return best_trajectory, best_final_reward
 
     
-    # def plan_trajectory_grm(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    # def plan_trajectory_grm(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
     #     """
     #     Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -622,7 +622,7 @@ class TwoSimulatorPlanner:
     #         kwargs: Additional arguments for environment building
     #         additional_env_build_kwargs: Additional environment building arguments
     #         trajectory_length: The number of actions to include in each trajectory
-    #         num_trajectories: Number of different trajectories to evaluate
+    #         num_candidates: Number of different trajectories to evaluate
             
     #     Returns:
     #         best_trajectory: List of actions forming the best trajectory
@@ -630,7 +630,7 @@ class TwoSimulatorPlanner:
     #     if self.verbose:
     #         print("\n" + "="*80)
     #         print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
-    #         print(f"[TwoSimulatorPlanner] Evaluating {num_trajectories} trajectories of length {trajectory_length}")
+    #         print(f"[TwoSimulatorPlanner] Evaluating {self.num_candidates} trajectories of length {self.trajectory_length}")
     #         print("="*80)
         
     #     # Update task description if provided
@@ -654,9 +654,9 @@ class TwoSimulatorPlanner:
     #     gemini_rewards = []
         
     #     # Generate and evaluate multiple trajectories
-    #     for traj_idx in range(num_trajectories):
+    #     for traj_idx in range(self.num_candidates):
     #         if self.verbose:
-    #             print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{num_trajectories}")
+    #             print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{self.num_candidates}")
             
     #         # Initialize trajectory for this run
     #         trajectory_actions = []
@@ -666,9 +666,9 @@ class TwoSimulatorPlanner:
     #         current_image = image
             
     #         # Generate a sequence of actions for this trajectory
-    #         for step in range(trajectory_length):
+    #         for step in range(self.trajectory_length):
     #             if self.verbose:
-    #                 print(f"  - Planning step {step+1}/{trajectory_length}")
+    #                 print(f"  - Planning step {step+1}/{self.trajectory_length}")
                 
     #             # Sample actions from the model with temperature to ensure diversity
     #             actions = self.sample_actions_from_model(
@@ -736,7 +736,7 @@ class TwoSimulatorPlanner:
     #             if self.verbose:
     #                 print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
-    #     average_trajectory_error = tot_trajectory_error / num_trajectories
+    #     average_trajectory_error = tot_trajectory_error / self.num_candidates
     #     # breakpoint()
     #     # Compute NDCG@k
     #     ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
@@ -759,7 +759,7 @@ class TwoSimulatorPlanner:
     #     return best_trajectory, best_final_reward
         
     
-    def plan_trajectory_reward_qwen(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5):
+    def plan_trajectory_reward_qwen(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -770,7 +770,7 @@ class TwoSimulatorPlanner:
             kwargs: Additional arguments for environment building
             additional_env_build_kwargs: Additional environment building arguments
             trajectory_length: The number of actions to include in each trajectory
-            num_trajectories: Number of different trajectories to evaluate
+            num_candidates: Number of different trajectories to evaluate
             
         Returns:
             best_trajectory: List of actions forming the best trajectory
@@ -778,7 +778,7 @@ class TwoSimulatorPlanner:
         if self.verbose:
             print("\n" + "="*80)
             print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
-            print(f"[TwoSimulatorPlanner] Evaluating {num_trajectories} trajectories of length {trajectory_length}")
+            print(f"[TwoSimulatorPlanner] Evaluating {self.num_candidates} trajectories of length {self.trajectory_length}")
             print("="*80)
         
         # Update task description if provided
@@ -798,9 +798,9 @@ class TwoSimulatorPlanner:
         final_images = []
         
         # Generate and evaluate multiple trajectories
-        for traj_idx in range(num_trajectories):
+        for traj_idx in range(self.num_candidates):
             if self.verbose:
-                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{num_trajectories}")
+                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{self.num_candidates}")
             
             # Initialize trajectory for this run
             trajectory_actions = []
@@ -810,9 +810,9 @@ class TwoSimulatorPlanner:
             current_image = image
             
             # Generate a sequence of actions for this trajectory
-            for step in range(trajectory_length):
+            for step in range(self.trajectory_length):
                 if self.verbose:
-                    print(f"  - Planning step {step+1}/{trajectory_length}")
+                    print(f"  - Planning step {step+1}/{self.trajectory_length}")
                 
                 # Sample actions from the model with temperature to ensure diversity
                 actions = self.sample_actions_from_model(

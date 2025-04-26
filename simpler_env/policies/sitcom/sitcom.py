@@ -20,13 +20,12 @@ class SITCOMInference:
         horizon_per_action=5,
         num_steps_ahead=3,
         num_candidates=5,
-        num_best_actions=3,
+        trajectory_length: int = 10,  # New parameter for trajectory length
         temperature=1.0,
         render_tree=False,
         logging_dir="./results/planning",
         policy_setup: str = "widowx_bridge",
         action_scale: float = 1.0,
-        trajectory_length: int = 10,  # New parameter for trajectory length
     ):
         """
         Initialize the wrapper for the planning model.
@@ -66,7 +65,7 @@ class SITCOMInference:
             horizon_per_action=horizon_per_action,
             num_steps_ahead=num_steps_ahead,
             num_candidates=num_candidates,
-            num_best_actions=num_best_actions,
+            trajectory_length=trajectory_length,
             temperature=temperature,
             render_tree=render_tree,
             logging_dir=logging_dir,
@@ -79,7 +78,6 @@ class SITCOMInference:
         
         self.task_description = None
         self.action_buffer = deque()  # Buffer to store trajectory actions
-        self.trajectory_length = trajectory_length
     
     def reset(self, task_description: str) -> None:
         """
@@ -122,7 +120,6 @@ class SITCOMInference:
                 task_description, 
                 kwargs, 
                 additional_env_build_kwargs,
-                self.trajectory_length
             )
             
             print(f"Trajectory reward: {reward}")

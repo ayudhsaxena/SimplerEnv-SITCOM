@@ -4,8 +4,6 @@ action_ensemble_temp=$3
 logging_dir=$4
 gpu_id=$5
 unnorm_key=$6
-temperature=$7
-num_candidates=$8  # Added num_candidates parameter
 
 scene_name=bridge_table_1_v1
 robot=widowx
@@ -20,8 +18,7 @@ CUDA_VISIBLE_DEVICES=${gpu_id} python simpler_env/main_inference.py --policy-mod
   --rgb-overlay-path ${rgb_overlay_path} \
   --robot-init-x ${robot_init_x} ${robot_init_x} 1 --robot-init-y ${robot_init_y} ${robot_init_y} 1 --obj-variation-mode episode --obj-episode-range 0 24 \
   --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
-  --temperature ${temperature} \
-  --num_candidates ${num_candidates};
+  --temperature 1.0;
 
 CUDA_VISIBLE_DEVICES=${gpu_id} python simpler_env/main_inference.py --policy-model ${policy_model} --ckpt-path ${ckpt_path} --action-ensemble-temp ${action_ensemble_temp} --logging-dir ${logging_dir} \
   --robot ${robot} --policy-setup widowx_bridge \
@@ -30,8 +27,8 @@ CUDA_VISIBLE_DEVICES=${gpu_id} python simpler_env/main_inference.py --policy-mod
   --rgb-overlay-path ${rgb_overlay_path} \
   --robot-init-x ${robot_init_x} ${robot_init_x} 1 --robot-init-y ${robot_init_y} ${robot_init_y} 1 --obj-variation-mode episode --obj-episode-range 0 24 \
   --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
-  --temperature ${temperature} \
-  --num_candidates ${num_candidates};
+  --temperature 1.0;
+
 
 CUDA_VISIBLE_DEVICES=${gpu_id} python simpler_env/main_inference.py --policy-model ${policy_model} --ckpt-path ${ckpt_path} --action-ensemble-temp ${action_ensemble_temp} --logging-dir ${logging_dir} \
   --robot ${robot} --policy-setup widowx_bridge \
@@ -40,8 +37,9 @@ CUDA_VISIBLE_DEVICES=${gpu_id} python simpler_env/main_inference.py --policy-mod
   --rgb-overlay-path ${rgb_overlay_path} \
   --robot-init-x ${robot_init_x} ${robot_init_x} 1 --robot-init-y ${robot_init_y} ${robot_init_y} 1 --obj-variation-mode episode --obj-episode-range 0 24 \
   --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
-  --temperature ${temperature} \
-  --num_candidates ${num_candidates};
+  --temperature 1.0;
+
+
 
 scene_name=bridge_table_1_v2
 robot=widowx_sink_camera_setup
@@ -56,5 +54,6 @@ CUDA_VISIBLE_DEVICES=${gpu_id} python simpler_env/main_inference.py --policy-mod
   --rgb-overlay-path ${rgb_overlay_path} \
   --robot-init-x ${robot_init_x} ${robot_init_x} 1 --robot-init-y ${robot_init_y} ${robot_init_y} 1 --obj-variation-mode episode --obj-episode-range 0 24 \
   --robot-init-rot-quat-center 0 0 0 1 --robot-init-rot-rpy-range 0 0 1 0 0 1 0 0 1 \
-  --temperature ${temperature} \
-  --num_candidates ${num_candidates};
+  --temperature 1.0;
+
+

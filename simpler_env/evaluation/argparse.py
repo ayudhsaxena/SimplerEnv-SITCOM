@@ -121,8 +121,8 @@ def get_args():
                         help='Number of simulation steps to look ahead (h parameter)')
     parser.add_argument('--num_candidates', type=int, default=5, 
                         help='Number of candidate actions to sample')
-    parser.add_argument('--num_best_actions', type=int, default=3, 
-                        help='Number of best actions to select')
+    parser.add_argument('--trajectory_length', type=int, default=10,
+                        help='Length of trajectory to request from planner')
     parser.add_argument('--temperature', type=float, default=1.0, 
                         help='Temperature for sampling')
     parser.add_argument('--render_tree', action='store_true', 

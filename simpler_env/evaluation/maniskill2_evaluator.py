@@ -62,9 +62,12 @@ def save_trajectory_pair(epi_id, pair_id, env_name, img1, img2, reward):
     
     img_id = f"{epi_id}_{pair_id}"
     
+    # some random number
+    rnd_img_id = str(np.random.randint(0, 1000000))
+    
     # Save images
-    img1_path = os.path.join(images_dir, f"{img_id}_img1.png")
-    img2_path = os.path.join(images_dir, f"{img_id}_img2.png")
+    img1_path = os.path.join(images_dir, f"{img_id}_img1_{rnd_img_id}.png")
+    img2_path = os.path.join(images_dir, f"{img_id}_img2_{rnd_img_id}.png")
     # Convert from RGB to BGR if needed before saving
     if len(img1.shape) == 3 and img1.shape[2] == 3:
         img1_to_save = cv2.cvtColor(img1, cv2.COLOR_RGB2BGR)
@@ -206,7 +209,7 @@ def run_maniskill2_eval_single_episode(
     
     action_list = []
     
-    collect_trajectory = False
+    collect_trajectory = True
     
     if collect_trajectory:
         pair_id = 0

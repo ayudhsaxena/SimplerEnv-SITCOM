@@ -122,7 +122,7 @@ if __name__ == "__main__":
             horizon_per_action=args.horizon_per_action if hasattr(args, 'horizon_per_action') else 5,
             num_steps_ahead=args.num_steps_ahead if hasattr(args, 'num_steps_ahead') else 3,
             num_candidates=args.num_candidates if hasattr(args, 'num_candidates') else 5,
-            num_best_actions=args.num_best_actions if hasattr(args, 'num_best_actions') else 3,
+            trajectory_length=args.trajectory_length if hasattr(args, 'trajectory_length') else 10,
             temperature=args.temperature if hasattr(args, 'temperature') else 1.0,
             render_tree=args.render_tree if hasattr(args, 'render_tree') else False,
             logging_dir=args.logging_dir,
