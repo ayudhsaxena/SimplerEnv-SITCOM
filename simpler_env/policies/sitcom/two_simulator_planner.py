@@ -69,8 +69,7 @@ class TwoSimulatorPlanner:
             action_scale=action_scale,
             unnorm_key='simpler_rlds',
         )
-        
-        print("HERE")
+
         # Set up reward function or use default
         if reward_function is None:
             self.reward_function = self._default_reward_function
@@ -93,6 +92,9 @@ class TwoSimulatorPlanner:
         # Task description
         self.task_description = None
         self.episode_id = -1
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         
         # Reset internal state
         self.reset()
@@ -467,7 +469,6 @@ class TwoSimulatorPlanner:
         self.world_model.load_state_dict(ckpt)
         
         # Move the model to GPU if available
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.world_model = self.world_model.to(self.device)
         self.world_model.eval()
         
@@ -595,7 +596,7 @@ class TwoSimulatorPlanner:
         # breakpoint()
         return next_images
 
-    def plan_trajectory_with_world_model(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_trajectories=5, rewards_history=None):
+    def plan_trajectory_with_world_model(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs, trajectory_length=10, num_rollouts=5, rewards_history=None):
         """
         Plan and evaluate multiple trajectories using a world model instead of a simulator.
         
@@ -649,11 +650,11 @@ class TwoSimulatorPlanner:
             most_recent_metric = copy.deepcopy(rewards_history[-1])
         
         # Generate trajectories with batch processing
-        batch_size = min(num_trajectories, 10)  # Process in smaller batches to avoid OOM
+        batch_size = min(num_rollouts, 32)  # Process in smaller batches to avoid OOM
         all_trajectories = []
         
-        for batch_start in range(0, num_trajectories, batch_size):
-            batch_end = min(batch_start + batch_size, num_trajectories)
+        for batch_start in range(0, num_rollouts, batch_size):
+            batch_end = min(batch_start + batch_size, num_rollouts)
             batch_size_actual = batch_end - batch_start
             
             if self.verbose:
@@ -674,6 +675,7 @@ class TwoSimulatorPlanner:
                 # Sample actions for each trajectory in the batch
                 batch_actions = []
                 raw_batch_actions = []
+
                 for i in range(batch_size_actual):
                     raw_actions, actions = self.sample_actions_from_model(
                         current_images[i],
@@ -685,29 +687,15 @@ class TwoSimulatorPlanner:
                     if not actions:
                         batch_actions.append(None)
                     else:
-                        action = actions[0]
-                        raw_action = raw_actions[0]
-                        batch_trajectory_actions[i].append(action)
-                        raw_batch_actions.append(raw_action)
+                        batch_trajectory_actions[i].append(actions[0])
+                        raw_batch_actions.append(raw_actions[0])
 
-                # Filter out trajectories with invalid actions
-                valid_indices = [i for i, action in enumerate(raw_batch_actions) if action is not None]
-                if not valid_indices:
-                    if self.verbose:
-                        print("  - No valid actions sampled, ending step early")
-                    break
-                
-                # Prepare batch for world model simulation
-                valid_images = [current_images[i] for i in valid_indices]
-                valid_actions = [raw_batch_actions[i] for i in valid_indices]
-                
                 # Simulate all valid actions in a batch
-                next_images = self.simulate_batch_with_world_model(valid_images, valid_actions)
-                
+                next_images = self.simulate_batch_with_world_model(current_images, raw_batch_actions)
+                current_images = next_images
                 # Update states for trajectories with valid actions
-                for j, i in enumerate(valid_indices):
-                    current_images[i] = next_images[j]
-                    batch_trajectory_images[i].append(next_images[j])
+                for i, img in enumerate(next_images):
+                    batch_trajectory_images[i].append(img)
             
             # Append the completed trajectories to the overall list
             for i in range(batch_size_actual):
@@ -754,9 +742,10 @@ class TwoSimulatorPlanner:
         current_image = get_image_from_maniskill2_obs_dict(current_env, obs)
         eval_env, _ = self.get_to_state(env_name, action_list, env_reset_options, kwargs, additional_env_build_kwargs)
         sim_images = [current_image] + self.get_simulator_rollout_images(eval_env, best_trajectory, kwargs, additional_env_build_kwargs, env_reset_options)
-        self.save_trajectory_images(best_trajectory, best_traj_images, sim_images, os.path.join(self.logging_dir, "planning", f"episode_{self.episode_id}"))
+        self.save_trajectory_images(best_trajectory, best_traj_images, sim_images, os.path.join(self.logging_dir, "planning", f"{env_name}",f"episode_{self.episode_id}"))
         # Calculate planning time
         planning_time = time.time() - start_time
+        print(f"[TwoSimulatorPlanner] 1 step trajectory planning completed in {planning_time:.2f} seconds")
         
         if self.verbose:
             print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")

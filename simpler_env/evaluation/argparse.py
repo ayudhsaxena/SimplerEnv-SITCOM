@@ -129,6 +129,12 @@ def get_args():
                         help='Whether to render the tree')
     parser.add_argument('--unnorm-key', type=str, default='simpler_rlds',
                         help='Whether to unnormalize the actions')
+    parser.add_argument('--traj_length', type=int, default=5,
+                        help='Length of trajectory to request from planner')
+    parser.add_argument('--num_rollouts', type=int, default=5,
+                        help='Number of rollouts to perform')
+    parser.add_argument('--window_size', type=int, default=5,
+                        help='Window size for the planner')
 
     args = parser.parse_args()
 

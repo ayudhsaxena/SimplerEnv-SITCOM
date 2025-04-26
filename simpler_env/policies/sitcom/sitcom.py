@@ -26,6 +26,7 @@ class SITCOMInference:
         trajectory_length: int = 10,
         max_history_size: int = 10,
         use_world_model: bool = True,  # New parameter to toggle world model usage
+        window_size: int = 5,
         world_model_path: str = "/data/user_data/ayudhs/random/multimodal/SimplerEnv-SITCOM/results/dyna1_simpl_ft_1/vae.pt",  # Path to world model
     ):
         """
@@ -78,6 +79,10 @@ class SITCOMInference:
         # World model configuration
         self.use_world_model = use_world_model
         self.world_model_path = world_model_path
+        self.num_rollouts = num_candidates
+        assert window_size <= self.trajectory_length, "Window size must be less than or equal to trajectory length"
+        self.window_size = window_size
+
     def reset(self, task_description: str, episode_id: int) -> None:
         """
         Reset the model with a new task description.
@@ -128,7 +133,8 @@ class SITCOMInference:
                     kwargs, 
                     additional_env_build_kwargs,
                     self.trajectory_length,
-                    rewards_history=self.trajectory_rewards_history
+                    rewards_history=self.trajectory_rewards_history,
+                    num_rollouts=self.num_rollouts,
                 )
             else:
                 # Use simulator-based planning
@@ -161,6 +167,7 @@ class SITCOMInference:
                 self.trajectory_rewards_history = self.trajectory_rewards_history[-self.max_history_size:]
                             
             # Fill the buffer with the trajectory actions
+            trajectory = trajectory[:self.window_size]  # Limit to trajectory length
             for action in trajectory:
                 self.action_buffer.append(action)
         

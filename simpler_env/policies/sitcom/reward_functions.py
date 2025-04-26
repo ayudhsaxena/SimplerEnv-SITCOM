@@ -295,7 +295,14 @@ def reward_for_stack_green_on_yellow(state):
         if src_on_target:
             reward += 10.0  # Large bonus for successful stacking
     
-    return reward
+    metrics ={
+        'obj_position': source_pos,
+        'obj_distance': gripper_to_source_dist,
+        'reward': reward,
+        'use_obj_in_reward': is_grasped,
+    }
+    
+    return metrics
         
 
 
@@ -337,15 +344,21 @@ def reward_for_put_spoon_on_tablecloth(state):
         if src_on_target:
             reward += 8.0  # Bonus for successful placement
     
-    return reward
+    metrics ={
+        'obj_position': source_pos,
+        'obj_distance': gripper_to_source_dist,
+        'reward': reward,
+        'use_obj_in_reward': is_grasped,
+    }
+    
+    return metrics
         
 
 def reward_for_put_eggplant_in_basket(state):
     """Reward function for putting an eggplant in a basket."""
     # Note: For eggplant in basket, evaluate uses success_require_src_completely_on_target=False
     # and z_flag_required_offset=0.06
-    eval_results = state.evaluate(success_require_src_completely_on_target=False, 
-                                    z_flag_required_offset=0.06)
+    eval_results = state.evaluate()
     
     # Extract important information
     is_grasped = eval_results['is_src_obj_grasped']
@@ -388,4 +401,11 @@ def reward_for_put_eggplant_in_basket(state):
         if src_on_target:
             reward += 10.0  # Large bonus for successful placement
     
-    return reward
+    metrics ={
+        'obj_position': source_pos,
+        'obj_distance': gripper_to_source_dist,
+        'reward': reward,
+        'use_obj_in_reward': is_grasped,
+    }
+    
+    return metrics

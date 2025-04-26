@@ -97,11 +97,11 @@ if __name__ == "__main__":
             
             if "PutCarrotOnPlateInScene" in env_name:
                 return reward_for_put_carrot_on_plate
-            elif "StackGreenOnYellowInScene" in env_name:
+            elif "StackGreenCubeOnYellowCubeBakedTex" in env_name:
                 return reward_for_stack_green_on_yellow
-            elif "PutEggplantInBasketInScene" in env_name:
+            elif "PutEggplantInBasket" in env_name:
                 return reward_for_put_eggplant_in_basket
-            elif "PutSpoonOnTableclothInScene" in env_name:
+            elif "PutSpoonOnTableCloth" in env_name:
                 return reward_for_put_spoon_on_tablecloth
             else:
                 # Default reward function
@@ -120,11 +120,13 @@ if __name__ == "__main__":
             num_initial_actions=args.num_initial_actions if hasattr(args, 'num_initial_actions') else 10,
             horizon_per_action=args.horizon_per_action if hasattr(args, 'horizon_per_action') else 5,
             num_steps_ahead=args.num_steps_ahead if hasattr(args, 'num_steps_ahead') else 3,
-            num_candidates=args.num_candidates if hasattr(args, 'num_candidates') else 5,
+            num_candidates=args.num_rollouts if hasattr(args, 'num_rollouts') else 5,
             num_best_actions=args.num_best_actions if hasattr(args, 'num_best_actions') else 3,
             temperature=args.temperature if hasattr(args, 'temperature') else 1.0,
             render_tree=args.render_tree if hasattr(args, 'render_tree') else False,
             logging_dir=args.logging_dir,
+            trajectory_length=args.traj_length if hasattr(args, 'traj_length') else 10,
+            window_size=args.window_size if hasattr(args, 'window_size') else 5
         )
     else:
         raise NotImplementedError()
