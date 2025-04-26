@@ -17,7 +17,6 @@ from google.genai import errors
 import time
 import io
 from PIL import Image
-from simpler_env.policies.sitcom.ecot_inference import ECoT
 
 
 class GeneralRewarder:
@@ -45,8 +44,12 @@ class GeneralRewarder:
         self.generation_config = types.GenerateContentConfig(
             temperature=0.3,
         )
-        # Initialize ECoT for subtask extraction
-        self.ecot = ECoT(model_path="Embodied-CoT/ecot-openvla-7b-bridge")
+    
+    # def encode_image(self, image_path: str) -> bytes:
+    #     """Read an image file and return its bytes."""
+    #     breakpoint()
+    #     with open(image_path, "rb") as img_file:
+    #         return img_file.read()
     
     def encode_image(self, image_path: str) -> bytes:
         """Read an image file and return its bytes."""
@@ -76,13 +79,13 @@ class GeneralRewarder:
         pil_image.save(buffer, format="JPEG")
         return buffer.getvalue()
     
-    def create_system_instruction(self, instruction: str, subtask: str) -> str:
+    def create_system_instruction(self, subtask: str) -> str:
         """Create the system instruction with principles generation."""
         return (
             f"You are a helpful reward model. Your task is to evaluate how well is a transition from image1 to image2 "
             f" to accomplish a subtask of the bigger task:\n"
-            f"**Task:** {instruction}.\n\n"
-            f"**Subtask:** {subtask}\n\n"
+            f"**Task:** Put carrot on plate in scene.\n\n"
+            # f"**Subtask:** {subtask}\n\n"
             f"First, establish a set of clear principles for evaluating the task.\n"
             f"When developing principles, focus on aspects such as:\n"
             f"- Proximity: How close is the gripper to the target object?\n"
@@ -214,60 +217,26 @@ class GeneralRewarder:
         
         return result
     
-    def extract_subtask(self, image1: np.ndarray, instruction: str = "Put carrot on plate in scene") -> str:
-        """Extract subtask from the first image using ECoT."""
-        try:
-            # Save numpy array as temporary image file for ECoT
-            temp_path = "/tmp/temp_image.jpg"
-            pil_image = Image.fromarray(image1)
-            pil_image.save(temp_path)
-            
-            # Run ECoT
-            result = self.ecot.run(temp_path, instruction)
-            
-            # Extract subtask
-            subtask_tag = " SUBTASK:"
-            if subtask_tag in result["reasoning"]:
-                subtask = result["reasoning"][subtask_tag].strip()
-                if "\n" in subtask:
-                    subtask = subtask.split("\n")[0].strip()
-            else:
-                subtask = result["answer"].strip()
-                if "\n" in subtask:
-                    subtask = subtask.split("\n")[0].strip()
-            
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            
-            return subtask
-            
-        except Exception as e:
-            print(f"Error extracting subtask: {e}")
-            return "move carrot to plate"  # Fallback to default
-    
-    def get_reward(self, image1: np.ndarray, image2: np.ndarray, instruction: str = None) -> Dict[str, Any]:
+    def get_reward(self, image1: np.ndarray, image2: np.ndarray, subtask: str) -> Dict[str, Any]:
         """
         Get reward for a pair of images for a given subtask.
         
         Args:
             image1: First image as numpy array
             image2: Second image as numpy array
-            instruction: Instruction for the task
+            subtask: Description of the subtask
             
         Returns:
             Dict with reward information (principles, reason, reward)
         """
-        # breakpoint()
-        # Generate subtask if not provided
-        subtask = self.extract_subtask(image1, instruction)
-        
+        subtask = 'move carrot to plate'
         # Retrieve similar examples from memory
         examples = self.reward_memory.retrieve(subtask, self.num_examples)
+        # examples = []
         # breakpoint()
         
         # Create system instruction
-        system_instruction = self.create_system_instruction(instruction=instruction, subtask=subtask)
+        system_instruction = self.create_system_instruction(subtask)
         
         # Create conversation content with numpy arrays directly
         conversation = self.create_conversation(
@@ -276,12 +245,14 @@ class GeneralRewarder:
             image1, 
             image2
         )
-        # breakpoint()
+        
         
         MAX_TRIES = 3 
         curr_try = 0
         while curr_try < MAX_TRIES:
             try:
+                # breakpoint()
+                
                 # Generate the response
                 response = self.client.models.generate_content(
                     model="gemini-2.0-flash",
@@ -308,4 +279,42 @@ class GeneralRewarder:
         # Add the subtask for reference
         result["subtask"] = subtask
         
+        # if result["reward"] >=0 and result["reward"] <=5:
+        #     return result["reward"]
+        # else:
+        #     print(f"Invalid reward value: {result['reward']}. Defaulting to 0.")
+        #     # breakpoint()
+        #     result["reward"] = 0
+
         return result['reward']
+
+
+# Example usage with numpy arrays
+def main():
+    import dotenv
+    dotenv.load_dotenv()
+    API_KEY = os.getenv("GOOGLE_API_KEY")
+    
+    # Initialize memory
+    memory = RewardMemory.load("./memory/reward_memory_state.pkl", api_key=API_KEY)
+    
+    # Initialize the rewarder
+    rewarder = GeneralRewarder(memory, api_key=API_KEY, num_examples=4)
+    
+    # Example: Create dummy image data
+    dummy_image1 = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+    dummy_image2 = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
+    
+    # Get reward using array data directly
+    result = rewarder.get_reward(
+        dummy_image1,
+        dummy_image2,
+        "move carrot to plate"
+    )
+    
+    print("Test Result:")
+    print(f"Reward: {result['reward']}")
+    print(f"Reason: {result['reason']}")
+
+if __name__ == "__main__":
+    main()

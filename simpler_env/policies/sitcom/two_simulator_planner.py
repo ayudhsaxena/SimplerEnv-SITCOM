@@ -474,144 +474,7 @@ class TwoSimulatorPlanner:
         return error
     
     
-    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
-        """
-        Plan and evaluate multiple trajectories, returning the best one based on final reward.
-        
-        Args:
-            env: The current environment state (first simulator)
-            image: The current image observation
-            task_description: Optional updated task description
-            kwargs: Additional arguments for environment building
-            additional_env_build_kwargs: Additional environment building arguments
-            trajectory_length: The number of actions to include in each trajectory
-            num_candidates: Number of different trajectories to evaluate
-            
-        Returns:
-            best_trajectory: List of actions forming the best trajectory
-        """
-        if self.verbose:
-            print("\n" + "="*80)
-            print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
-            print(f"[TwoSimulatorPlanner] Evaluating {self.num_candidates} trajectories of length {self.trajectory_length}")
-            print("="*80)
-        
-        # Update task description if provided
-        if task_description is not None:
-            if self.verbose:
-                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
-            self.task_description = task_description
-            self.model.reset(task_description)
-        
-        # Record time for performance monitoring
-        import time
-        start_time = time.time()
-        
-        # Track best trajectory and its final reward
-        best_trajectory = None
-        best_final_reward = float('-inf')
-        
-        tot_trajectory_error = 0
-        
-        oracle_rewards = []
-        gemini_rewards = []
-        
-        # Generate and evaluate multiple trajectories
-        for traj_idx in range(self.num_candidates):
-            if self.verbose:
-                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{self.num_candidates}")
-            
-            # Initialize trajectory for this run
-            trajectory_actions = []
-            current_env, current_obs, start_image = self.get_to_state(env_name, action_list,env_reset_options, kwargs, additional_env_build_kwargs)
-            # current_env = self.copy_state(env_name, kwargs, additional_env_build_kwargs)
-            # current_env = 
-            current_image = image
-            
-            # Generate a sequence of actions for this trajectory
-            for step in range(self.trajectory_length):
-                if self.verbose:
-                    print(f"  - Planning step {step+1}/{self.trajectory_length}")
-                
-                # Sample actions from the model with temperature to ensure diversity
-                actions = self.sample_actions_from_model(
-                    current_image, 
-                    self.task_description, 
-                    num_samples=1,  # Just sample one action at a time for the trajectory
-                    temperature=self.temperature
-                )
-                
-                if not actions:
-                    if self.verbose:
-                        print("  - Failed to sample actions, ending trajectory early")
-                    break
-                    
-                action = actions[0]
-                trajectory_actions.append(action)
-                
-                # Simulate this action to update the environment state for the next step
-                current_env, current_obs, reward, current_image, done = self.simulate_action(
-                    current_env, action, kwargs, additional_env_build_kwargs
-                )
-                
-                computed_reward = self.compute_reward(current_env)
-                # print(f"  - Simulated step reward: {computed_reward}")
-    
-                
-                if self.verbose:
-                    print(f"  - Simulated step reward: {reward}")
-                
-                # If task is done, we can stop this trajectory
-                if done:
-                    if self.verbose:
-                        print(f"  - Task completed after {step+1} steps")
-                    break
-                
-            # Compute final reward for this trajectory
-            
-            
-            # Compute final reward for this trajectory by oracle
-            final_reward = self.compute_reward(current_env)
-            
-            
-            
-            if self.verbose:
-                print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
-            
-            # print reward for the trajectory
-            print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
-            # Update best trajectory if this one is better
-            if final_reward > best_final_reward:
-                best_final_reward = final_reward
-                best_trajectory = trajectory_actions
-                
-                if self.verbose:
-                    print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
-        
-        # average_trajectory_error = tot_trajectory_error / num_candidates
-        
-        # Compute NDCG@k
-        # ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
-        
-        # if self.verbose:
-        #     print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
-        # # Store the trajectory error for analysis
-        # self.ranking_error.append(ndcg_score)        
-        # self.point_wise_error.append(average_trajectory_error)
-        # print(f"Average trajectory error: {average_trajectory_error}")
-        print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
-        # Calculate planning time
-        planning_time = time.time() - start_time
-        
-        if self.verbose:
-            print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")
-            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
-            print("="*80 + "\n")
-        
-        return best_trajectory, best_final_reward
-
-    
-    # def plan_trajectory_grm(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
+    # def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
     #     """
     #     Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -705,22 +568,11 @@ class TwoSimulatorPlanner:
     #                 break
                 
     #         # Compute final reward for this trajectory
-    #         final_image = get_image_from_maniskill2_obs_dict(current_env, current_obs)
-    #         # breakpoint()
-    #         final_reward = self.rewarder.get_reward(start_image, final_image, "")   # sending empty subtask
-    #         # breakpoint()
+            
+            
     #         # Compute final reward for this trajectory by oracle
-    #         final_reward_oracle = self.compute_reward(current_env)
+    #         final_reward = self.compute_reward(current_env)
             
-    #         print("FInal Reward from GRM:", final_reward)
-            
-    #         # error analysis
-    #         error = self.compare_rewards(final_reward_oracle, final_reward)
-            
-    #         tot_trajectory_error += error
-            
-    #         oracle_rewards.append(final_reward_oracle)
-    #         gemini_rewards.append(final_reward)
             
             
     #         if self.verbose:
@@ -736,17 +588,17 @@ class TwoSimulatorPlanner:
     #             if self.verbose:
     #                 print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
-    #     average_trajectory_error = tot_trajectory_error / self.num_candidates
-    #     # breakpoint()
+    #     # average_trajectory_error = tot_trajectory_error / num_candidates
+        
     #     # Compute NDCG@k
-    #     ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
-    #     # breakpoint()
-
-    #     # Store the trajectory error for analysis
-    #     self.ranking_error.append(ndcg_score)        
-    #     self.point_wise_error.append(average_trajectory_error)
-    #     print(f"Average trajectory error: {average_trajectory_error}")
-    #     print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
+    #     # ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
+        
+    #     # if self.verbose:
+    #     #     print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
+    #     # # Store the trajectory error for analysis
+    #     # self.ranking_error.append(ndcg_score)        
+    #     # self.point_wise_error.append(average_trajectory_error)
+    #     # print(f"Average trajectory error: {average_trajectory_error}")
     #     print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
     #     # Calculate planning time
     #     planning_time = time.time() - start_time
@@ -757,6 +609,154 @@ class TwoSimulatorPlanner:
     #         print("="*80 + "\n")
         
     #     return best_trajectory, best_final_reward
+
+    
+    def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
+        """
+        Plan and evaluate multiple trajectories, returning the best one based on final reward.
+        
+        Args:
+            env: The current environment state (first simulator)
+            image: The current image observation
+            task_description: Optional updated task description
+            kwargs: Additional arguments for environment building
+            additional_env_build_kwargs: Additional environment building arguments
+            trajectory_length: The number of actions to include in each trajectory
+            num_candidates: Number of different trajectories to evaluate
+            
+        Returns:
+            best_trajectory: List of actions forming the best trajectory
+        """
+        if self.verbose:
+            print("\n" + "="*80)
+            print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
+            print(f"[TwoSimulatorPlanner] Evaluating {self.num_candidates} trajectories of length {self.trajectory_length}")
+            print("="*80)
+        
+        # Update task description if provided
+        if task_description is not None:
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
+            self.task_description = task_description
+            self.model.reset(task_description)
+        
+        # Record time for performance monitoring
+        import time
+        start_time = time.time()
+        
+        # Track best trajectory and its final reward
+        best_trajectory = None
+        best_final_reward = float('-inf')
+        
+        tot_trajectory_error = 0
+        
+        oracle_rewards = []
+        gemini_rewards = []
+        
+        # Generate and evaluate multiple trajectories
+        for traj_idx in range(self.num_candidates):
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{self.num_candidates}")
+            
+            # Initialize trajectory for this run
+            trajectory_actions = []
+            current_env, current_obs, start_image = self.get_to_state(env_name, action_list,env_reset_options, kwargs, additional_env_build_kwargs)
+            # current_env = self.copy_state(env_name, kwargs, additional_env_build_kwargs)
+            # current_env = 
+            current_image = image
+            
+            # Generate a sequence of actions for this trajectory
+            for step in range(self.trajectory_length):
+                if self.verbose:
+                    print(f"  - Planning step {step+1}/{self.trajectory_length}")
+                
+                # Sample actions from the model with temperature to ensure diversity
+                actions = self.sample_actions_from_model(
+                    current_image, 
+                    self.task_description, 
+                    num_samples=1,  # Just sample one action at a time for the trajectory
+                    temperature=self.temperature
+                )
+                
+                if not actions:
+                    if self.verbose:
+                        print("  - Failed to sample actions, ending trajectory early")
+                    break
+                    
+                action = actions[0]
+                trajectory_actions.append(action)
+                
+                # Simulate this action to update the environment state for the next step
+                current_env, current_obs, reward, current_image, done = self.simulate_action(
+                    current_env, action, kwargs, additional_env_build_kwargs
+                )
+                
+                # computed_reward = self.compute_reward(current_env)
+                # print(f"  - Simulated step reward: {computed_reward}")
+    
+                
+                if self.verbose:
+                    print(f"  - Simulated step reward: {reward}")
+                
+                # If task is done, we can stop this trajectory
+                if done:
+                    if self.verbose:
+                        print(f"  - Task completed after {step+1} steps")
+                    break
+                
+            # Compute final reward for this trajectory
+            final_image = get_image_from_maniskill2_obs_dict(current_env, current_obs)
+            # breakpoint()
+            final_reward = self.rewarder.get_reward(start_image, final_image, task_description)  
+            # breakpoint()
+            # Compute final reward for this trajectory by oracle
+            final_reward_oracle = self.compute_reward(current_env)
+            
+            print("FInal Reward from GRM:", final_reward)
+            
+            # error analysis
+            error = self.compare_rewards(final_reward_oracle, final_reward)
+            
+            tot_trajectory_error += error
+            
+            oracle_rewards.append(final_reward_oracle)
+            gemini_rewards.append(final_reward)
+            
+            
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
+            
+            # print reward for the trajectory
+            print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
+            # Update best trajectory if this one is better
+            if final_reward > best_final_reward:
+                best_final_reward = final_reward
+                best_trajectory = trajectory_actions
+                
+                if self.verbose:
+                    print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
+        
+        average_trajectory_error = tot_trajectory_error / self.num_candidates
+        # breakpoint()
+        # Compute NDCG@k
+        ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
+        # breakpoint()
+
+        # Store the trajectory error for analysis
+        self.ranking_error.append(ndcg_score)        
+        self.point_wise_error.append(average_trajectory_error)
+        print(f"Average trajectory error: {average_trajectory_error}")
+        print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
+        print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+        # Calculate planning time
+        planning_time = time.time() - start_time
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")
+            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+            print("="*80 + "\n")
+        
+        return best_trajectory, best_final_reward
         
     
     def plan_trajectory_reward_qwen(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
