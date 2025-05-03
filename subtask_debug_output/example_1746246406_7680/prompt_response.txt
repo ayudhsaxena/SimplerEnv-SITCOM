@@ -1,0 +1,10 @@
+===== HIGH-LEVEL TASK =====
+Put carrot on plate in scene
+
+===== MODEL RESPONSE =====
+<subtask>Move to the plate.</subtask>
+<reasoning>The robot is currently holding the carrot. The next step towards completing the task "Put carrot on plate" is to move the gripper, along with the carrot, towards the target location, which is the plate.</reasoning>
+
+===== PARSED RESULT =====
+Subtask: Move to the plate.
+Reasoning: The robot is currently holding the carrot. The next step towards completing the task "Put carrot on plate" is to move the gripper, along with the carrot, towards the target location, which is the plate.

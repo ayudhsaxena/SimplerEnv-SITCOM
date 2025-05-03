@@ -14,7 +14,8 @@ def process_dataset_for_reward_memory(
     device: Optional[str] = None,
     use_4bit: bool = False,
     output_path: str = "reward_memory_data.json",
-    max_samples: Optional[int] = None
+    max_samples: Optional[int] = None,
+    num_bins: int = 10,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Process a dataset to extract subtasks and organize image pairs with rewards by subtask.
@@ -46,9 +47,8 @@ def process_dataset_for_reward_memory(
     all_rewards = [item["reward"] for item in data]
     min_reward = min(all_rewards)
     max_reward = max(all_rewards)
-    
     # Create bin edges for reward classes (4 bins)
-    bin_edges = np.linspace(min_reward, max_reward, num=5)  # 5 edges for 4 bins
+    bin_edges = np.linspace(min_reward, max_reward, num=num_bins)  # 5 edges for 4 bins
     
     # Dictionary to store formatted data
     formatted_data = {}
@@ -59,7 +59,7 @@ def process_dataset_for_reward_memory(
         image1_path = os.path.join(BASE_DIR, item["image1_path"])
         image2_path = os.path.join(BASE_DIR, item["image2_path"])
         raw_reward = item["reward"]
-        instruction = item.get("instruction", "Put carrot on the plate")
+        instruction = item.get("instruction", "")
         
         # Determine reward class (0 to 3)
         reward_class = 0
@@ -132,7 +132,7 @@ if __name__ == "__main__":
         device="cuda" if torch.cuda.is_available() else "cpu",
         use_4bit=False,
         output_path="reward_memory_data.json",
-        max_samples=100
+        max_samples=None
     )
     
     # Print some statistics

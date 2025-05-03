@@ -1,0 +1,328 @@
+{
+  "subtask": "Reach the carrot.",
+  "system_instruction": "You are a helpful reward model. Your task is to evaluate how well is a transition from image1 to image2  to accomplish a subtask of the bigger task:\n**Task:** Put carrot on plate in scene.\n\n**Subtask:** Reach the carrot.\n\nFirst, establish a set of clear principles for evaluating the task.\nWhen developing principles, focus on aspects such as:\n- Proximity: How close is the gripper to the target object?\n- Alignment: Is the gripper correctly oriented relative to the object?\n- Gripper state: Is the gripper appropriately opened/closed for the task stage?\n- Contact: Has the gripper made appropriate contact with the object?\n- Object movement: Has the object been moved in the intended direction?\n\nThen, apply these principles to evaluate the transition with:\n- A <principles> section outlining your evaluation framework\n- A <reason> explaining your specific evaluation of this transition\n- A scalar <reward> (integer)\n",
+  "retrieved_examples": [
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_6_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_6_img2.png",
+      "raw_reward": 2.5019049644470215e-05,
+      "copied_image1": "ex0_img1_9_6_img1.png",
+      "copied_image2": "ex0_img2_9_6_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_0_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_0_img2.png",
+      "raw_reward": 0.17705024778842926,
+      "copied_image1": "ex1_img1_2_0_img1.png",
+      "copied_image2": "ex1_img2_2_0_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_5_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_5_img2.png",
+      "raw_reward": 10.078562058508396,
+      "copied_image1": "ex2_img1_3_5_img1.png",
+      "copied_image2": "ex2_img2_3_5_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_7_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_7_img2.png",
+      "raw_reward": -8.238852024078369e-05,
+      "copied_image1": "ex3_img1_5_7_img1.png",
+      "copied_image2": "ex3_img2_5_7_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_4_img2.png",
+      "raw_reward": 10.047477677464485,
+      "copied_image1": "ex4_img1_6_4_img1.png",
+      "copied_image2": "ex4_img2_6_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_2_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_2_img2.png",
+      "raw_reward": 1.1952418684959412,
+      "copied_image1": "ex5_img1_8_2_img1.png",
+      "copied_image2": "ex5_img2_8_2_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_4_img2.png",
+      "raw_reward": 10.0634535998106,
+      "copied_image1": "ex6_img1_2_4_img1.png",
+      "copied_image2": "ex6_img2_2_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_4_img2.png",
+      "raw_reward": 0.10612112283706665,
+      "copied_image1": "ex7_img1_5_4_img1.png",
+      "copied_image2": "ex7_img2_5_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_6_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_6_img2.png",
+      "raw_reward": 0.059230297803878784,
+      "copied_image1": "ex8_img1_5_6_img1.png",
+      "copied_image2": "ex8_img2_5_6_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_8_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_8_img2.png",
+      "raw_reward": -2.975510060787201,
+      "copied_image1": "ex9_img1_5_8_img1.png",
+      "copied_image2": "ex9_img2_5_8_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_7_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_7_img2.png",
+      "raw_reward": -0.005455249920487404,
+      "copied_image1": "ex10_img1_1_7_img1.png",
+      "copied_image2": "ex10_img2_1_7_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_2_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_2_img2.png",
+      "raw_reward": 0.003032006323337555,
+      "copied_image1": "ex11_img1_9_2_img1.png",
+      "copied_image2": "ex11_img2_9_2_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_0_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_0_img2.png",
+      "raw_reward": 0.16927362978458405,
+      "copied_image1": "ex12_img1_0_0_img1.png",
+      "copied_image2": "ex12_img2_0_0_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_3_img2.png",
+      "raw_reward": 0.0005031079053878784,
+      "copied_image1": "ex13_img1_1_3_img1.png",
+      "copied_image2": "ex13_img2_1_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_0_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_0_img2.png",
+      "raw_reward": 0.16177505254745483,
+      "copied_image1": "ex14_img1_8_0_img1.png",
+      "copied_image2": "ex14_img2_8_0_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_3_img2.png",
+      "raw_reward": -0.002480223774909973,
+      "copied_image1": "ex15_img1_4_3_img1.png",
+      "copied_image2": "ex15_img2_4_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_2_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_2_img2.png",
+      "raw_reward": 0.013704337179660797,
+      "copied_image1": "ex16_img1_4_2_img1.png",
+      "copied_image2": "ex16_img2_4_2_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_0_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_0_img2.png",
+      "raw_reward": 0.16986161470413208,
+      "copied_image1": "ex17_img1_4_0_img1.png",
+      "copied_image2": "ex17_img2_4_0_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_2_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_2_img2.png",
+      "raw_reward": 1.0874064415693283,
+      "copied_image1": "ex18_img1_0_2_img1.png",
+      "copied_image2": "ex18_img2_0_2_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_3_img2.png",
+      "raw_reward": 0.12364305555820465,
+      "copied_image1": "ex19_img1_6_3_img1.png",
+      "copied_image2": "ex19_img2_6_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_3_img2.png",
+      "raw_reward": 1.1189157515764236,
+      "copied_image1": "ex20_img1_2_3_img1.png",
+      "copied_image2": "ex20_img2_2_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_3_img2.png",
+      "raw_reward": 1.07151560485363,
+      "copied_image1": "ex21_img1_10_3_img1.png",
+      "copied_image2": "ex21_img2_10_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/7_11_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/7_11_img2.png",
+      "raw_reward": 2.8150888569653034,
+      "copied_image1": "ex22_img1_7_11_img1.png",
+      "copied_image2": "ex22_img2_7_11_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_1_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_1_img2.png",
+      "raw_reward": 1.7279680669307709,
+      "copied_image1": "ex23_img1_8_1_img1.png",
+      "copied_image2": "ex23_img2_8_1_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_7_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_7_img2.png",
+      "raw_reward": 0.00017700344324111938,
+      "copied_image1": "ex24_img1_9_7_img1.png",
+      "copied_image2": "ex24_img2_9_7_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_3_img2.png",
+      "raw_reward": 2.808724546805024,
+      "copied_image1": "ex25_img1_3_3_img1.png",
+      "copied_image2": "ex25_img2_3_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_5_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_5_img2.png",
+      "raw_reward": 10.0634535998106,
+      "copied_image1": "ex26_img1_2_5_img1.png",
+      "copied_image2": "ex26_img2_2_5_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_5_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_5_img2.png",
+      "raw_reward": 0.07306034862995148,
+      "copied_image1": "ex27_img1_5_5_img1.png",
+      "copied_image2": "ex27_img2_5_5_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_4_img2.png",
+      "raw_reward": 0.08008019626140594,
+      "copied_image1": "ex28_img1_10_4_img1.png",
+      "copied_image2": "ex28_img2_10_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_10_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_10_img2.png",
+      "raw_reward": -0.005520418286323547,
+      "copied_image1": "ex29_img1_4_10_img1.png",
+      "copied_image2": "ex29_img2_4_10_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_0_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_0_img2.png",
+      "raw_reward": 0.16214169561862946,
+      "copied_image1": "ex30_img1_1_0_img1.png",
+      "copied_image2": "ex30_img2_1_0_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_4_img2.png",
+      "raw_reward": 0.012027394026517868,
+      "copied_image1": "ex31_img1_1_4_img1.png",
+      "copied_image2": "ex31_img2_1_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_4_img2.png",
+      "raw_reward": -0.0025824010372161865,
+      "copied_image1": "ex32_img1_4_4_img1.png",
+      "copied_image2": "ex32_img2_4_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_11_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_11_img2.png",
+      "raw_reward": 0.006277621723711491,
+      "copied_image1": "ex33_img1_1_11_img1.png",
+      "copied_image2": "ex33_img2_1_11_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_2_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_2_img2.png",
+      "raw_reward": 2.781743884086609,
+      "copied_image1": "ex34_img1_6_2_img1.png",
+      "copied_image2": "ex34_img2_6_2_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_5_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_5_img2.png",
+      "raw_reward": -0.022430256009101868,
+      "copied_image1": "ex35_img1_4_5_img1.png",
+      "copied_image2": "ex35_img2_4_5_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_8_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_8_img2.png",
+      "raw_reward": 0.05107560381293297,
+      "copied_image1": "ex36_img1_9_8_img1.png",
+      "copied_image2": "ex36_img2_9_8_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/7_7_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/7_7_img2.png",
+      "raw_reward": 2.774141490459442,
+      "copied_image1": "ex37_img1_7_7_img1.png",
+      "copied_image2": "ex37_img2_7_7_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_4_img2.png",
+      "raw_reward": 0.08453869819641113,
+      "copied_image1": "ex38_img1_3_4_img1.png",
+      "copied_image2": "ex38_img2_3_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_4_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_4_img2.png",
+      "raw_reward": 10.076191373169422,
+      "copied_image1": "ex39_img1_8_4_img1.png",
+      "copied_image2": "ex39_img2_8_4_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_1_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_1_img2.png",
+      "raw_reward": 0.14584019780158997,
+      "copied_image1": "ex40_img1_1_1_img1.png",
+      "copied_image2": "ex40_img2_1_1_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_5_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_5_img2.png",
+      "raw_reward": 0.045253688003867865,
+      "copied_image1": "ex41_img1_1_5_img1.png",
+      "copied_image2": "ex41_img2_1_5_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_3_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_3_img2.png",
+      "raw_reward": 11.117444649338722,
+      "copied_image1": "ex42_img1_0_3_img1.png",
+      "copied_image2": "ex42_img2_0_3_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_10_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_10_img2.png",
+      "raw_reward": -0.005650250241160393,
+      "copied_image1": "ex43_img1_9_10_img1.png",
+      "copied_image2": "ex43_img2_9_10_img2.png"
+    },
+    {
+      "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_6_img1.png",
+      "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_6_img2.png",
+      "raw_reward": -4.530930891633034e-05,
+      "copied_image1": "ex44_img1_1_6_img1.png",
+      "copied_image2": "ex44_img2_1_6_img2.png"
+    }
+  ],
+  "test_images": {
+    "image1_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_7_img1.png",
+    "image2_path": "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_7_img2.png",
+    "copied_image1": "9_7_img1.png",
+    "copied_image2": "9_7_img2.png"
+  },
+  "model_response": "<principles>1. Proximity: Evaluate how close the gripper gets to the target object\n2. Alignment: Assess if the gripper is correctly oriented\n3. Contact: Determine if appropriate contact is made with the object\n4. Movement: Analyze if the object moves in the desired direction</principles>\n<reason>This transition shows progress towards the goal of Reach the carrot..</reason>\n<reward>1</reward>"
+}

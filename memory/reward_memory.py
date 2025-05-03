@@ -9,6 +9,8 @@ from google.genai import types
 from google.genai import errors
 from typing import List, Dict, Any, Tuple
 import time
+from functools import lru_cache
+
 
 MAX_TRIES = 3
 # Number of times to retry the API call in case of failure
@@ -58,6 +60,8 @@ class RewardMemory:
         # Process the data
         self.processed_data = self._process_data()
     
+
+    @lru_cache(maxsize=None)
     def _extract_object_action(self, subtask: str) -> Dict[str, str]:
         """
         Extract object and action from a subtask using Google's Generative AI.
@@ -101,6 +105,7 @@ class RewardMemory:
             'object': parsed_response.get('object', '') if parsed_response.get('object', '') is not None else ""
         }
     
+    @lru_cache(maxsize=None)
     def _get_embedding(self, text: str) -> np.ndarray:
         """
         Get embedding vector for a text.
@@ -358,7 +363,7 @@ if __name__ == "__main__":
     
     # Use the loaded memory
     query = "Move to the block."
-    results = loaded_memory.retrieve(query, num_examples=5)
+    results = loaded_memory.retrieve(query, num_examples=1)
     
     # Print the results
     for i, result in enumerate(results):

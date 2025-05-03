@@ -1,0 +1,260 @@
+===== SUBTASK =====
+Move the carrot to the plate.
+
+===== SYSTEM INSTRUCTION =====
+You are a helpful reward model. Your task is to evaluate how well is a transition from image1 to image2  to accomplish a subtask of the bigger task:
+**Task:** Put carrot on plate in scene.
+
+**Subtask:** Move the carrot to the plate.
+
+First, establish a set of clear principles for evaluating the task.
+When developing principles, focus on aspects such as:
+- Proximity: How close is the gripper to the target object?
+- Alignment: Is the gripper correctly oriented relative to the object?
+- Gripper state: Is the gripper appropriately opened/closed for the task stage?
+- Contact: Has the gripper made appropriate contact with the object?
+- Object movement: Has the object been moved in the intended direction?
+
+Then, apply these principles to evaluate the transition with:
+- A <principles> section outlining your evaluation framework
+- A <reason> explaining your specific evaluation of this transition
+- A scalar <reward> (integer)
+
+
+===== RETRIEVED EXAMPLES =====
+Example 1:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_4_img2.png
+  Raw Reward: 10.0634535998106
+
+Example 2:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_4_img2.png
+  Raw Reward: 0.10612112283706665
+
+Example 3:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_0_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_0_img2.png
+  Raw Reward: 0.16927362978458405
+
+Example 4:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_3_img2.png
+  Raw Reward: 0.0005031079053878784
+
+Example 5:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_0_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_0_img2.png
+  Raw Reward: 0.16177505254745483
+
+Example 6:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_3_img2.png
+  Raw Reward: -0.002480223774909973
+
+Example 7:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_6_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_6_img2.png
+  Raw Reward: 0.059230297803878784
+
+Example 8:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_8_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_8_img2.png
+  Raw Reward: -2.975510060787201
+
+Example 9:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_4_img2.png
+  Raw Reward: 10.047477677464485
+
+Example 10:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_2_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_2_img2.png
+  Raw Reward: 1.1952418684959412
+
+Example 11:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_7_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_7_img2.png
+  Raw Reward: -0.005455249920487404
+
+Example 12:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_5_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_5_img2.png
+  Raw Reward: 10.078562058508396
+
+Example 13:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_6_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_6_img2.png
+  Raw Reward: 2.5019049644470215e-05
+
+Example 14:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_7_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_7_img2.png
+  Raw Reward: -8.238852024078369e-05
+
+Example 15:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_2_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_2_img2.png
+  Raw Reward: 0.003032006323337555
+
+Example 16:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_0_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_0_img2.png
+  Raw Reward: 0.17705024778842926
+
+Example 17:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_3_img2.png
+  Raw Reward: 11.117444649338722
+
+Example 18:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_3_img2.png
+  Raw Reward: 0.12364305555820465
+
+Example 19:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_3_img2.png
+  Raw Reward: 1.1189157515764236
+
+Example 20:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_3_img2.png
+  Raw Reward: 1.07151560485363
+
+Example 21:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_2_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_2_img2.png
+  Raw Reward: 0.013704337179660797
+
+Example 22:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_0_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_0_img2.png
+  Raw Reward: 0.16986161470413208
+
+Example 23:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/7_11_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/7_11_img2.png
+  Raw Reward: 2.8150888569653034
+
+Example 24:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_1_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_1_img2.png
+  Raw Reward: 1.7279680669307709
+
+Example 25:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_5_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_5_img2.png
+  Raw Reward: 10.0634535998106
+
+Example 26:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_5_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_5_img2.png
+  Raw Reward: 0.07306034862995148
+
+Example 27:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_0_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_0_img2.png
+  Raw Reward: 0.16214169561862946
+
+Example 28:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_4_img2.png
+  Raw Reward: 0.012027394026517868
+
+Example 29:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_4_img2.png
+  Raw Reward: -0.0025824010372161865
+
+Example 30:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/8_4_img2.png
+  Raw Reward: 10.076191373169422
+
+Example 31:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_10_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_10_img2.png
+  Raw Reward: -0.005520418286323547
+
+Example 32:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_3_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_3_img2.png
+  Raw Reward: 2.808724546805024
+
+Example 33:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_7_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_7_img2.png
+  Raw Reward: 0.00017700344324111938
+
+Example 34:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_11_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_11_img2.png
+  Raw Reward: 0.006277621723711491
+
+Example 35:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_2_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/6_2_img2.png
+  Raw Reward: 2.781743884086609
+
+Example 36:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_5_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/4_5_img2.png
+  Raw Reward: -0.022430256009101868
+
+Example 37:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/3_4_img2.png
+  Raw Reward: 0.08453869819641113
+
+Example 38:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_1_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_1_img2.png
+  Raw Reward: 1.912050113081932
+
+Example 39:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_5_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_5_img2.png
+  Raw Reward: 0.045253688003867865
+
+Example 40:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_4_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_4_img2.png
+  Raw Reward: 0.08008019626140594
+
+Example 41:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_6_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/1_6_img2.png
+  Raw Reward: -4.530930891633034e-05
+
+Example 42:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_8_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/9_8_img2.png
+  Raw Reward: 0.05107560381293297
+
+Example 43:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_2_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/0_2_img2.png
+  Raw Reward: 1.0874064415693283
+
+Example 44:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_2_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/2_2_img2.png
+  Raw Reward: 1.7323136776685715
+
+Example 45:
+  Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_5_img1.png
+  Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/10_5_img2.png
+  Raw Reward: -0.004160791635513306
+
+===== TEST IMAGES =====
+Test Image1: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_4_img1.png
+Test Image2: /zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/images/5_4_img2.png
+
+===== MODEL RESPONSE =====
+<principles>1. Proximity: Evaluate how close the gripper gets to the target object
+2. Alignment: Assess if the gripper is correctly oriented
+3. Contact: Determine if appropriate contact is made with the object
+4. Movement: Analyze if the object moves in the desired direction</principles>
+<reason>This transition shows progress towards the goal of Move the carrot to the plate..</reason>
+<reward>7</reward>
