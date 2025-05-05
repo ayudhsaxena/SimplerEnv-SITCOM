@@ -9,7 +9,7 @@ plt.style.use('seaborn-v0_8-whitegrid')
 sns.set_palette("husl")
 
 # Base directory containing all experiment results
-base_dir = "/home/rishisha/SimplerEnv-SITCOM/results"
+base_dir = "/home/rishisha/SimplerEnv-SITCOM/results_scaling_laws"
 
 # List of candidate values
 candidates = [1, 5, 10, 15, 20, 25]
@@ -60,7 +60,15 @@ def create_scaling_plot(success_type, title_suffix):
                 values.append(np.nan)
         
         ax.plot(candidates, values, marker='o', linewidth=3, markersize=10, 
-                label=pretty_names[scenario])
+                label=f'{pretty_names[scenario]} (SITCOM-EnvSim)')
+    
+    # Add SITCOM-dynamic line for put carrot on plate (only for entire success)
+    if success_type == 'entire':
+        # SITCOM-dynamic results for put carrot on plate
+        sitcom_dynamic_values = [0.208, 0.417, 0.791, 0.791, 0.75, 0.9583]
+        ax.plot(candidates, sitcom_dynamic_values, marker='^', linestyle=':', 
+                linewidth=3, markersize=10, color='red',
+                label='Put Carrot on Plate (SITCOM-Dynamics)')
     
     ax.set_xlabel('Number of Candidates', fontsize=16, labelpad=10)
     ax.set_ylabel('Success Rate', fontsize=16, labelpad=10)

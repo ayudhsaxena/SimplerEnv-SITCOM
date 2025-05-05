@@ -289,7 +289,7 @@ class RewardDatasetSplitter:
     def _split_data(self):
         """Split the data into train and test sets."""
         # Set random seed for reproducibility
-        random.seed(self.seed)
+        # random.seed(self.seed)
         
         # Shuffle the data
         indices = list(range(len(self.all_examples)))

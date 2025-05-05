@@ -40,3 +40,5 @@ slurm*
 try.py
 
 simpler_env/reward_scripts/outputs
+debug_grm_old/
+debug_grm_run1

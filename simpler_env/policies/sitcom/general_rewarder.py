@@ -308,4 +308,4 @@ class GeneralRewarder:
         # Add the subtask for reference
         result["subtask"] = subtask
         
-        return result['reward']
+        return result['reward'], examples
