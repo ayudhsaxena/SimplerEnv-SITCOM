@@ -503,7 +503,7 @@ class RewardDatasetSplitter:
         """
         for i in range(0, len(self.test_examples), batch_size):
             yield self.test_examples[i:i + batch_size]
-    
+
     def get_train_examples(self) -> List[Dict[str, Any]]:
         """Get all training examples."""
         return self.train_examples

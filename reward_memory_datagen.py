@@ -10,12 +10,11 @@ BASE_DIR = "/zfsauton2/home/hshah2/SITCOM/reward_data/"
 
 def process_dataset_for_reward_memory(
     input_json_path: str,
-    model_path: str = "Embodied-CoT/ecot-openvla-7b-bridge",
-    device: Optional[str] = None,
-    use_4bit: bool = False,
+    ecot_model,
     output_path: str = "reward_memory_data.json",
     max_samples: Optional[int] = None,
     num_bins: int = 10,
+    instruction: str = "Put carrot on plate in scene"
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Process a dataset to extract subtasks and organize image pairs with rewards by subtask.
@@ -41,10 +40,11 @@ def process_dataset_for_reward_memory(
         data = data[:max_samples]
     
     # Initialize ECoT model
-    ecot = ECoT(model_path=model_path, device=device, use_4bit=use_4bit)
+    ecot = ecot_model
     
     # Extract all rewards to calculate bins
     all_rewards = [item["reward"] for item in data]
+    
     min_reward = min(all_rewards)
     max_reward = max(all_rewards)
     # Create bin edges for reward classes (4 bins)
@@ -52,6 +52,13 @@ def process_dataset_for_reward_memory(
     
     # Dictionary to store formatted data
     formatted_data = {}
+    formatted_data["meta_data"] = {
+        "num_bins": num_bins,
+        "min_reward": min_reward,
+        "max_reward": max_reward,
+        "bin_edges": bin_edges.tolist(),
+        "instruction": instruction
+    }
     
     # Process each image pair
     print(f"Processing dataset ({len(data)} samples)...")
@@ -61,7 +68,6 @@ def process_dataset_for_reward_memory(
         raw_reward = item["reward"]
         instruction = item.get("instruction", "")
         
-        # Determine reward class (0 to 3)
         reward_class = 0
         for i in range(len(bin_edges) - 1):
             if bin_edges[i] <= raw_reward <= bin_edges[i + 1]:
@@ -105,6 +111,9 @@ def process_dataset_for_reward_memory(
             if subtask not in formatted_data:
                 formatted_data[subtask] = []
             formatted_data[subtask].append(data_point)
+            if idx % 100 == 0:
+                with open(output_path, 'w') as f:
+                    json.dump(formatted_data, f, indent=2)
             
         except Exception as e:
             print(f"Error processing sample {idx}, images: {image1_path} and {image2_path}")
@@ -123,25 +132,31 @@ def process_dataset_for_reward_memory(
 # Example usage
 if __name__ == "__main__":
     # Path to your input JSON file
-    input_json_path = "/zfsauton2/home/hshah2/SITCOM/reward_data/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/trajectory_pairs.json"
-    
+    input_json_path = [("/zfsauton2/home/hshah2/SITCOM/trajectories_ft_sim/PutCarrotOnPlateInScene-v0/trajectory_pairs.json", "Put carrot on plate in scene"),
+                       ("/zfsauton2/home/hshah2/SITCOM/trajectories_ft_sim/PutEggplantInBasketScene-v0/trajectory_pairs.json", "Put eggplant in basket in scene"),
+                       ("/zfsauton2/home/hshah2/SITCOM/trajectories_ft_sim/PutSpoonOnTableClothInScene-v0/trajectory_pairs.json", "Put spoon on table cloth in scene"),
+                       ("/zfsauton2/home/hshah2/SITCOM/trajectories_ft_sim/StackGreenCubeOnYellowCubeBakedTexInScene-v0/trajectory_pairs.json", "Stack green cube on yellow cube"),]
+    model_path = "Embodied-CoT/ecot-openvla-7b-bridge"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    use_4bit = False  # Set to True if you want to use 4-bit quantization
+    model = ECoT(model_path=model_path, device=device, use_4bit=use_4bit)
     # Process the dataset
-    formatted_data = process_dataset_for_reward_memory(
-        input_json_path=input_json_path,
-        model_path="Embodied-CoT/ecot-openvla-7b-bridge",
-        device="cuda" if torch.cuda.is_available() else "cpu",
-        use_4bit=False,
-        output_path="reward_memory_data.json",
-        max_samples=None
-    )
-    
-    # Print some statistics
-    total_samples = sum(len(pairs) for pairs in formatted_data.values())
-    print(f"Total samples: {total_samples}")
-    
-    # Print sample of subtasks and their sample counts
-    print("\nSubtask distribution (top 10):")
-    subtask_counts = [(subtask, len(pairs)) for subtask, pairs in formatted_data.items()]
-    subtask_counts.sort(key=lambda x: x[1], reverse=True)
-    for subtask, count in subtask_counts[:10]:
-        print(f"  {subtask}: {count} samples")
+    for idx, (input_json_path, instruction) in enumerate(input_json_path):
+        formatted_data = process_dataset_for_reward_memory(
+            input_json_path=input_json_path,
+            ecot_model=model,
+            output_path=f"reward_memory_data_{idx}.json",
+            max_samples=None,
+            num_bins=10,
+            instruction=instruction,
+        )
+        # Print some statistics
+        total_samples = sum(len(pairs) for pairs in formatted_data.values())
+        print(f"Total samples: {total_samples}")
+        
+        # Print sample of subtasks and their sample counts
+        print("\nSubtask distribution (top 10):")
+        subtask_counts = [(subtask, len(pairs)) for subtask, pairs in formatted_data.items()]
+        subtask_counts.sort(key=lambda x: x[1], reverse=True)
+        for subtask, count in subtask_counts[:10]:
+            print(f"  {subtask}: {count} samples")

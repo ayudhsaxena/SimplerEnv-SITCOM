@@ -280,7 +280,6 @@ class ECoT:
         inputs = self.processor(prompt, image).to(self.device, dtype=torch.bfloat16)
         
         # Run inference
-        torch.manual_seed(seed)
         start_time = time.time()
         action, generated_ids = self.model.predict_action(
             **inputs, 

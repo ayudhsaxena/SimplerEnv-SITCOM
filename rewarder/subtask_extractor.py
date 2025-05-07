@@ -7,13 +7,23 @@ from google.genai import types
 import time
 import random
 
+import json
+import os
+import numpy as np
+from typing import List, Dict, Any, Optional
+from tqdm import tqdm
+import torch
+import sys
+sys.path.append("../")
+from ecot_inference import ECoT
+
 class GeminiSubtaskExtractor:
     """
     A class that uses Google Gemini to extract subtasks from robotic tasks
     based on an image and high-level task description.
     """
     
-    def __init__(self, api_key: str = None, model_name: str = "gemini-pro-vision", 
+    def __init__(self, api_key: str = None, model_name: str = "gemini-2.5-pro-preview-03-25", 
                  debug_mode: bool = False, debug_dir: str = "subtask_debug_output"):
         """
         Initialize the GeminiSubtaskExtractor with a specific model.
@@ -61,24 +71,24 @@ class GeminiSubtaskExtractor:
         """
         return [
             {
-                "task": "Pick up the fork and move it to the bottom left side of the counter.",
-                "subtask": "Move to the fork.",
-                "reasoning": "The fork is still downward from the current position of the arm, so the arm continues to move that direction."
+                "task": "Put carrot on the plate in scene",
+                "subtask": "Move to the carrot.",
+                "reasoning": "..."
             },
             {
-                "task": "Grab the mug and place it on the coaster.",
-                "subtask": "Approach the mug.",
-                "reasoning": "The first step is to move the robot arm to the vicinity of the mug before attempting to grasp it."
+                "task": "Put spoon on the table cloth in scene",
+                "subtask": "Grip the spoon.",
+                "reasoning": "..."
             },
             {
-                "task": "Open the drawer and take out the scissors.",
-                "subtask": "Grip the drawer handle.",
-                "reasoning": "Before opening the drawer, the robot needs to grip the drawer handle and grasp it properly."
+                "task": "Put spoon on the table cloth in scene.",
+                "subtask": "Move to the plate.",
+                "reasoning": "..."
             },
             {
-                "task": "Stack the blue block on top of the red block.",
-                "subtask": "Pick up the blue block.",
-                "reasoning": "The robot needs to pickup the blue block since it is close by and then approach stacking."
+                "task": "Put eggplant in basket.",
+                "subtask": "Release the eggplant.",
+                "reasoning": "..."
             }
         ]
     
@@ -112,7 +122,8 @@ class GeminiSubtaskExtractor:
             f"from an image based on a high-level task description.\n\n"
             f"**Task:** {task}\n\n"
             f"Based on the provided image, determine what the next subtask should be to make progress toward completing "
-            f"the overall task. Consider the current state of the robot and the environment.\n\n"
+            f"the overall task. Consider the current state of the robot and the environment."
+            f"Give an elaborate reasoning considering the current position of arm, whether the object is grasped or not, how far is the object and if it is grasped where is the arm holding the object.\n\n"
             f"Return your response with:\n"
             f"- A <subtask> section with a clear, actionable subtask\n"
             f"- A <reasoning> section explaining why this is the appropriate next subtask based on the image\n"
@@ -322,16 +333,30 @@ class GeminiSubtaskExtractor:
 
 # Example usage
 def main():
-    import argparse
+    import os
+    from dotenv import load_dotenv
+    import torch
     
-    # Set up command line arguments
-    parser = argparse.ArgumentParser(description='Extract subtasks from robotic tasks using Gemini.')
-    parser.add_argument('--image_path', type=str, default="/zfsauton2/home/hshah2/SITCOM/aggregate_v3/PutCarrotOnPlateInScene-v0/episode_0/images/02.jpg", help='Path to the image file')
-    parser.add_argument('--task', type=str, default='Put carrot on plate in scene')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode to save examples and API responses')
-    parser.add_argument('--debug_dir', type=str, default='subtask_debug_output', help='Directory to save debug information')
-    parser.add_argument('--model', type=str, default='gemini-2.5-pro-preview-03-25', help='Gemini model to use')
-    args = parser.parse_args()
+    # Direct variable definitions instead of command line arguments
+    image_task_tuples = [
+        # Define multiple (image_path, task) tuples
+        ("/zfsauton2/home/hshah2/SITCOM/aggregate_v3/PutSpoonOnTableClothInScene-v0/episode_10/images/07.jpg", 
+         "Put spoon on the table cloth in scene"),
+        ("/zfsauton2/home/hshah2/SITCOM/aggregate_v3/PutCarrotOnPlateInScene-v0/episode_0/images/02.jpg", 
+         "Put carrot on plate in scene"),
+        ("/zfsauton2/home/hshah2/SITCOM/aggregate_v3/PutEggplantInBasketScene-v0/episode_4/images/24.jpg",
+         "Put eggplant in basket in scene"),
+        ("/zfsauton2/home/hshah2/SITCOM/aggregate_v3/PutSpoonOnTableClothInScene-v0/episode_10/images/09.jpg",
+         "Put spoon on the table cloth in scene"),
+        ("/zfsauton2/home/hshah2/SITCOM/aggregate_v3/StackGreenCubeOnYellowCubeBakedTexInScene-v0/episode_11/images/10.jpg",
+         "Stack green cube on yellow cube"),
+        # Add more tuples as needed
+    ]
+    
+    # Configuration variables directly defined
+    debug_mode = False
+    debug_dir = 'subtask_debug_output'
+    model_name = 'gemini-2.5-pro-preview-03-25'
     
     # Load environment variables
     load_dotenv()
@@ -340,28 +365,55 @@ def main():
     # Initialize the extractor
     extractor = GeminiSubtaskExtractor(
         api_key=API_KEY,
-        model_name=args.model,
-        debug_mode=args.debug,
-        debug_dir=args.debug_dir
+        model_name=model_name,
+        debug_mode=debug_mode,
+        debug_dir=debug_dir
     )
     
+    # Model setup for ECoT
+    model_path = "Embodied-CoT/ecot-openvla-7b-bridge"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    use_4bit = False  # Set to True if you want to use 4-bit quantization
+    model = ECoT(model_path=model_path, device=device, use_4bit=use_4bit)
     
-    # Read the image file
-    with open(args.image_path, "rb") as image_file:
-        image_bytes = image_file.read()
-    
-    # Extract subtask
-    result = extractor.extract_subtask(
-        image_bytes=image_bytes,
-        task=args.task
-    )
-    
-    # Print the result
-    print("\n=== Subtask Extraction Result ===")
-    print(f"Task: {args.task}")
-    print(f"Subtask: {result['subtask']}")
-    print(f"Reasoning: {result['reasoning']}")
-
+    # Process each image-task tuple
+    for image_path, task in image_task_tuples:
+        print(f"\n\n======= Processing: {task} =======")
+        print(f"Image path: {image_path}")
+        
+        # Read the image file
+        with open(image_path, "rb") as image_file:
+            image_bytes = image_file.read()
+        
+        # Extract subtask using Gemini
+        gemini_result = extractor.extract_subtask(
+            image_bytes=image_bytes,
+            task=task
+        )
+        
+        # Print the Gemini result
+        print("\n=== Gemini Subtask Extraction Result ===")
+        print(f"Task: {task}")
+        print(f"Subtask: {gemini_result['subtask']}")
+        print(f"Reasoning: {gemini_result['reasoning']}")
+        
+        # Extract subtask using ECoT
+        ecot_result = model.run(image_path, task)
+        
+        # Extract subtask from ECoT result
+        subtask = None
+        subtask_tag = " SUBTASK:"
+        if subtask_tag in ecot_result["reasoning"]:
+            subtask = ecot_result["reasoning"][subtask_tag].strip()
+            
+            # Clean up the subtask text
+            if "\n" in subtask:
+                subtask = subtask.split("\n")[0].strip()
+        
+        # Print the ECoT result
+        print("\n=== ECoT Subtask Extraction Result ===")
+        print(f"Subtask: {subtask}")
+        print(f"Full ECoT Result: {ecot_result}")
 
 if __name__ == "__main__":
     main()

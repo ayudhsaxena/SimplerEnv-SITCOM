@@ -34,3 +34,5 @@ results-sitcom
 
 simpler_env/reward_scripts/outputs
 *.png
+reward_memory_data*.json
+
