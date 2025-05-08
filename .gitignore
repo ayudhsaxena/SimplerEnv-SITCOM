@@ -38,3 +38,6 @@ outputs
 
 generate_plots.ipynb
 reward_plot.png
+
+play.py
+plots.ipynb

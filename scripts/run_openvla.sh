@@ -1,4 +1,4 @@
-model_name=sitcom
+model_name=openvla
 tasks=(
   bridge.sh
   # drawer_variant_agg.sh
@@ -16,7 +16,7 @@ tasks=(
 # )
 
 ckpts=(
-    /home/rishisha/SimplerEnv-SITCOM/openvla_finetuned/openvla-7b+simpler_rlds+b6+lr-0.0005+lora-r16+dropout-0.0--image_aug
+    /data/user_data/ayudhs/random/multimodal/openvla-7b+simpler_rlds+b6+lr-0.0005+lora-r16+dropout-0.0--image_aug
 )
 unnorm_key=simpler_rlds
 
@@ -26,12 +26,12 @@ for ckpt_path in ${ckpts[@]}; do
 
   # evaluation in simulator
 #   logging_dir=$base_dir/simpler_env/$(basename $ckpt_path)${action_ensemble_temp}
-  logging_dir=results/$(basename $ckpt_path)${action_ensemble_temp}
+  logging_dir=results/$(basename $ckpt_path)${action_ensemble_temp}_finetuned_only
   mkdir -p $logging_dir
   for i in ${!tasks[@]}; do
     task=${tasks[$i]}
     echo "🚀 running $task ..."
-    device=5
+    device=1
     session_name=CUDA${device}-$(basename $logging_dir)-${task}
     bash scripts/$task $ckpt_path $model_name $action_ensemble_temp $logging_dir $device $unnorm_key
   done
