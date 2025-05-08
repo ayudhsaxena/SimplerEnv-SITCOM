@@ -1,5 +1,7 @@
 from simpler_env.policies.sitcom.two_simulator_planner import TwoSimulatorPlanner
 from simpler_env.policies.sitcom.general_rewarder import GeneralRewarder
+from simpler_env.policies.sitcom.multi_rewarder import MultiImageRewarder
+
 from memory.reward_memory import RewardMemory
 import numpy as np
 from collections import deque
@@ -50,10 +52,11 @@ class SITCOMInference:
         # breakpoint()
         
         # TODO check this
-        memory = RewardMemory.load("./memory/reward_memory_state.pkl", api_key=API_KEY)
+        # memory = RewardMemory.load("./memory/reward_memory_state.pkl", api_key=API_KEY)
         
         ### create rewarder
-        self.rewarder = GeneralRewarder(memory, api_key=API_KEY, num_examples=4)
+        # self.rewarder = GeneralRewarder(memory, api_key=API_KEY, num_examples=4)
+        self.rewarder = MultiImageRewarder(max_images_per_comparison=4)
         
         # Create the planner
         self.planner = TwoSimulatorPlanner(

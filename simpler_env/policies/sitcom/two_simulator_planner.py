@@ -474,7 +474,159 @@ class TwoSimulatorPlanner:
         return error
     
     
-    # def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
+    def plan_trajectory_sim(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
+        """
+        Plan and evaluate multiple trajectories, returning the best one based on final reward.
+        
+        Args:
+            env: The current environment state (first simulator)
+            image: The current image observation
+            task_description: Optional updated task description
+            kwargs: Additional arguments for environment building
+            additional_env_build_kwargs: Additional environment building arguments
+            trajectory_length: The number of actions to include in each trajectory
+            num_candidates: Number of different trajectories to evaluate
+            
+        Returns:
+            best_trajectory: List of actions forming the best trajectory
+        """
+        if self.verbose:
+            print("\n" + "="*80)
+            print(f"[TwoSimulatorPlanner] Starting trajectory planning process")
+            print(f"[TwoSimulatorPlanner] Evaluating {self.num_candidates} trajectories of length {self.trajectory_length}")
+            print("="*80)
+        
+        # Update task description if provided
+        if task_description is not None:
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Updated task description: {task_description}")
+            self.task_description = task_description
+            self.model.reset(task_description)
+        
+        # Record time for performance monitoring
+        import time
+        start_time = time.time()
+        
+        # Track best trajectory and its final reward
+        best_trajectory = None
+        best_final_reward = float('-inf')
+        
+        final_images = []
+        final_rewards = []
+        
+        
+        # Generate and evaluate multiple trajectories
+        for traj_idx in range(self.num_candidates):
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Generating trajectory {traj_idx+1}/{self.num_candidates}")
+            
+            # Initialize trajectory for this run
+            trajectory_actions = []
+            current_env, current_obs, start_image = self.get_to_state(env_name, action_list,env_reset_options, kwargs, additional_env_build_kwargs)
+            # current_env = self.copy_state(env_name, kwargs, additional_env_build_kwargs)
+            # current_env = 
+            current_image = image
+            
+            # Generate a sequence of actions for this trajectory
+            for step in range(self.trajectory_length):
+                if self.verbose:
+                    print(f"  - Planning step {step+1}/{self.trajectory_length}")
+                
+                # Sample actions from the model with temperature to ensure diversity
+                actions = self.sample_actions_from_model(
+                    current_image, 
+                    self.task_description, 
+                    num_samples=1,  # Just sample one action at a time for the trajectory
+                    temperature=self.temperature
+                )
+                
+                if not actions:
+                    if self.verbose:
+                        print("  - Failed to sample actions, ending trajectory early")
+                    break
+                    
+                action = actions[0]
+                trajectory_actions.append(action)
+                
+                # Simulate this action to update the environment state for the next step
+                current_env, current_obs, reward, current_image, done = self.simulate_action(
+                    current_env, action, kwargs, additional_env_build_kwargs
+                )
+                
+                computed_reward = self.compute_reward(current_env)
+                # print(f"  - Simulated step reward: {computed_reward}")
+    
+                
+                if self.verbose:
+                    print(f"  - Simulated step reward: {reward}")
+                
+                # If task is done, we can stop this trajectory
+                if done:
+                    if self.verbose:
+                        print(f"  - Task completed after {step+1} steps")
+                    break
+                
+            # Compute final reward for this trajectory
+            
+            
+            # Compute final reward for this trajectory by oracle
+            final_reward = self.compute_reward(current_env)
+            final_image = get_image_from_maniskill2_obs_dict(current_env, current_obs)
+            
+            final_images.append(final_image)
+            final_rewards.append(final_reward)
+            
+            
+            if self.verbose:
+                print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
+            
+            # print reward for the trajectory
+            print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
+            # Update best trajectory if this one is better
+            if final_reward > best_final_reward:
+                best_final_reward = final_reward
+                best_trajectory = trajectory_actions
+                
+                if self.verbose:
+                    print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
+        
+        # save final_images and final rewards 
+        # Create a unique directory for this debug instance
+        import os
+        from datetime import datetime
+        # Create a timestamp-based folder name for better organization
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        rnd_num = np.random.randint(0, 100000)
+        debug_folder_name = f"debug_{timestamp}_{rnd_num}"
+        debug_instance_path = os.path.join("/data/user_data/rishisha/sitcom/debug_grm_multi/", debug_folder_name)
+        # Create the directory if it doesn't exist
+        os.makedirs(debug_instance_path, exist_ok=True)
+        # Save the images in the new folder
+        image1 = Image.fromarray(start_image)
+        image1.save(os.path.join(debug_instance_path, "start_image.png"))
+        for i, final_image in enumerate(final_images):
+            final_image = Image.fromarray(np.array(final_image))
+            final_image.save(os.path.join(debug_instance_path, f"final_image_{i}.png"))
+        # Save final rewards
+        with open(os.path.join(debug_instance_path, "final_rewards.txt"), "w") as f:
+            for i, final_reward in enumerate(final_rewards):
+                f.write(f"Trajectory {i}: {final_reward}\n")
+        
+        ####
+        
+        print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+        # Calculate planning time
+        planning_time = time.time() - start_time
+        
+        if self.verbose:
+            print(f"[TwoSimulatorPlanner] Trajectory planning completed in {planning_time:.2f} seconds")
+            print(f"[TwoSimulatorPlanner] Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
+            print("="*80 + "\n")
+        
+        return best_trajectory, best_final_reward
+
+    
+    # def plan_trajectory_grm(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
     #     """
     #     Plan and evaluate multiple trajectories, returning the best one based on final reward.
         
@@ -515,6 +667,8 @@ class TwoSimulatorPlanner:
         
     #     oracle_rewards = []
     #     gemini_rewards = []
+    #     final_images = []      
+    #     example_trajectories = []  
         
     #     # Generate and evaluate multiple trajectories
     #     for traj_idx in range(self.num_candidates):
@@ -554,7 +708,7 @@ class TwoSimulatorPlanner:
     #                 current_env, action, kwargs, additional_env_build_kwargs
     #             )
                 
-    #             computed_reward = self.compute_reward(current_env)
+    #             # computed_reward = self.compute_reward(current_env)
     #             # print(f"  - Simulated step reward: {computed_reward}")
     
                 
@@ -568,11 +722,24 @@ class TwoSimulatorPlanner:
     #                 break
                 
     #         # Compute final reward for this trajectory
-            
-            
+    #         final_image = get_image_from_maniskill2_obs_dict(current_env, current_obs)
+    #         # breakpoint()
+    #         final_reward, examples = self.rewarder.get_reward(start_image, final_image, task_description)  
+    #         # breakpoint()
     #         # Compute final reward for this trajectory by oracle
-    #         final_reward = self.compute_reward(current_env)
+    #         final_reward_oracle = self.compute_reward(current_env)
             
+    #         print("FInal Reward from GRM:", final_reward)
+            
+    #         # error analysis
+    #         error = self.compare_rewards(final_reward_oracle, final_reward)
+            
+    #         tot_trajectory_error += error
+            
+    #         oracle_rewards.append(final_reward_oracle)
+    #         gemini_rewards.append(final_reward)
+    #         final_images.append(final_image)
+    #         example_trajectories.append(examples)
             
             
     #         if self.verbose:
@@ -588,7 +755,107 @@ class TwoSimulatorPlanner:
     #             if self.verbose:
     #                 print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
         
-    #     breakpoint()
+    #     # breakpoint()
+    #     # check if all first images are same
+        
+    #     best_oracle_reward_idx = np.argmax(oracle_rewards)
+    #     best_oracle_reward = max(oracle_rewards)
+        
+        
+    #     oracle_idx_gemini_reward = gemini_rewards[best_oracle_reward_idx]
+    #     best_gemini_reward = max(gemini_rewards)
+        
+    #     best_gemini_reward_idx = np.argmax(gemini_rewards)
+    #     gemini_idx_oracle_reward = oracle_rewards[best_gemini_reward_idx]
+        
+    #     # breakpoint()
+        
+    #     print("Oracle Rewards: ", oracle_rewards)
+    #     print("Gemini Rewards: ", gemini_rewards)
+        
+    #     # if all oracle rewards are same then no problem
+    #     if len(set(oracle_rewards)) == 1:
+    #         print("All oracle rewards are same")
+    #         print("Oracle Rewards: ", oracle_rewards)
+    #     elif best_gemini_reward == oracle_idx_gemini_reward and gemini_idx_oracle_reward == best_oracle_reward:
+    #         print("Both simulators agree on the best trajectory") 
+    #     else:
+    #         print("We have a problem")
+            
+    #         # Create a unique directory for this debug instance
+    #         import os
+    #         from datetime import datetime
+            
+    #         # Create a timestamp-based folder name for better organization
+    #         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #         rnd_num = np.random.randint(0, 100000)
+    #         debug_folder_name = f"debug_{timestamp}_{rnd_num}"
+    #         debug_instance_path = os.path.join("/data/user_data/rishisha/sitcom/debug_grm/", debug_folder_name)
+            
+    #         # Create the directory if it doesn't exist
+    #         os.makedirs(debug_instance_path, exist_ok=True)
+            
+    #         # Save the images in the new folder
+    #         image1 = Image.fromarray(start_image)
+    #         image1.save(os.path.join(debug_instance_path, "start_image.png"))
+            
+    #         final_image_best_oracle = Image.fromarray(np.array(final_images[best_oracle_reward_idx]))
+    #         final_image_best_oracle.save(os.path.join(debug_instance_path, "final_image_best_oracle.png"))
+            
+    #         final_image_best_gemini = Image.fromarray(np.array(final_images[best_gemini_reward_idx]))
+    #         final_image_best_gemini.save(os.path.join(debug_instance_path, "final_image_best_gemini.png"))
+            
+    #         # Create a comprehensive JSON file with all relevant information
+    #         import json
+    #         data = {
+    #             # Task information
+    #             "task_description": task_description,
+                
+    #             # Best index information
+    #             "best_oracle_reward_idx": int(best_oracle_reward_idx),
+    #             "best_gemini_reward_idx": int(best_gemini_reward_idx),
+                
+    #             # Best rewards
+    #             "best_oracle_reward": float(best_oracle_reward),
+    #             "best_gemini_reward": float(best_gemini_reward),
+                
+    #             # Cross-rewards (clearly labeled)
+    #             "gemini_reward_at_best_oracle_idx": float(oracle_idx_gemini_reward),  # Gemini's reward at Oracle's best index
+    #             "oracle_reward_at_best_gemini_idx": float(gemini_idx_oracle_reward),  # Oracle's reward at Gemini's best index
+                
+    #             # All rewards
+    #             "all_oracle_rewards": [float(r) for r in oracle_rewards],
+    #             "all_gemini_rewards": [float(r) for r in gemini_rewards],
+                
+    #             # Example trajectories
+    #             "example_trajectories": example_trajectories,
+                
+    #             # Timestamp for reference
+    #             "timestamp": timestamp,
+                
+    #             # Additional information 
+    #             "trajectory_length": len(oracle_rewards),
+    #             "agreement_status": "disagreement" if best_oracle_reward_idx != best_gemini_reward_idx else "agreement"
+    #         }
+            
+    #         # Save the JSON file
+    #         with open(os.path.join(debug_instance_path, "debug_info.json"), "w") as f:
+    #             json.dump(data, f, indent=4)
+            
+    #         print(f"Debug information saved to: {debug_instance_path}")
+                
+                
+    #     average_trajectory_error = tot_trajectory_error / self.num_candidates
+    #     # breakpoint()
+    #     # Compute NDCG@k
+    #     ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
+    #     # breakpoint()
+
+    #     # Store the trajectory error for analysis
+    #     self.ranking_error.append(ndcg_score)        
+    #     self.point_wise_error.append(average_trajectory_error)
+    #     print(f"Average trajectory error: {average_trajectory_error}")
+    #     print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
     #     print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
     #     # Calculate planning time
     #     planning_time = time.time() - start_time
@@ -599,8 +866,9 @@ class TwoSimulatorPlanner:
     #         print("="*80 + "\n")
         
     #     return best_trajectory, best_final_reward
-
     
+    
+
     def plan_trajectory(self, env_name, action_list, env_reset_options, image, task_description, kwargs, additional_env_build_kwargs):
         """
         Plan and evaluate multiple trajectories, returning the best one based on final reward.
@@ -638,10 +906,8 @@ class TwoSimulatorPlanner:
         best_trajectory = None
         best_final_reward = float('-inf')
         
-        tot_trajectory_error = 0
         
         oracle_rewards = []
-        gemini_rewards = []
         final_images = []      
         example_trajectories = []  
         
@@ -698,139 +964,116 @@ class TwoSimulatorPlanner:
                 
             # Compute final reward for this trajectory
             final_image = get_image_from_maniskill2_obs_dict(current_env, current_obs)
-            # breakpoint()
-            final_reward, examples = self.rewarder.get_reward(start_image, final_image, task_description)  
-            # breakpoint()
+            
             # Compute final reward for this trajectory by oracle
             final_reward_oracle = self.compute_reward(current_env)
-            
-            print("FInal Reward from GRM:", final_reward)
-            
-            # error analysis
-            error = self.compare_rewards(final_reward_oracle, final_reward)
-            
-            tot_trajectory_error += error
-            
+
+        
             oracle_rewards.append(final_reward_oracle)
-            gemini_rewards.append(final_reward)
             final_images.append(final_image)
-            example_trajectories.append(examples)
             
+            example_trajectories.append(trajectory_actions)
             
-            if self.verbose:
-                print(f"[TwoSimulatorPlanner] Trajectory {traj_idx+1} final reward: {final_reward}")
-            
-            # print reward for the trajectory
-            print(f"Trajectory {traj_idx+1} final reward: {final_reward}")
-            # Update best trajectory if this one is better
-            if final_reward > best_final_reward:
-                best_final_reward = final_reward
-                best_trajectory = trajectory_actions
-                
-                if self.verbose:
-                    print(f"[TwoSimulatorPlanner] New best trajectory found with reward: {final_reward}")
+        # breakpoint()
+        result = self.rewarder.get_reward(start_image, final_images, task_description)
+
+        # The result would contain:
+        # - best_index: index of the best trajectory
+        # - reward: reward for the best trajectory
+        # - reason: explanation for why it's the best
+        # - subtask: extracted subtask
+
+        best_index = result["best_index"]
+        best_trajectory = example_trajectories[result["best_index"]]
+        best_final_reward = result["reward"]
+        gemini_reason = result["reason"]
         
         # breakpoint()
         # check if all first images are same
         
-        best_oracle_reward_idx = np.argmax(oracle_rewards)
-        best_oracle_reward = max(oracle_rewards)
-        
-        
-        oracle_idx_gemini_reward = gemini_rewards[best_oracle_reward_idx]
-        best_gemini_reward = max(gemini_rewards)
-        
-        best_gemini_reward_idx = np.argmax(gemini_rewards)
-        gemini_idx_oracle_reward = oracle_rewards[best_gemini_reward_idx]
-        
-        # breakpoint()
-        
         print("Oracle Rewards: ", oracle_rewards)
-        print("Gemini Rewards: ", gemini_rewards)
+        print("Gemini Best Index: ", best_index)
         
-        # if all oracle rewards are same then no problem
-        if len(set(oracle_rewards)) == 1:
-            print("All oracle rewards are same")
-            print("Oracle Rewards: ", oracle_rewards)
-        elif best_gemini_reward == oracle_idx_gemini_reward and gemini_idx_oracle_reward == best_oracle_reward:
-            print("Both simulators agree on the best trajectory") 
+        best_oracle_reward_idx = np.argmax(oracle_rewards)
+        
+        if np.std(oracle_rewards) < 0.01:
+            print("  Oracle rewards are too similar, skipping comparison")
+        elif best_oracle_reward_idx == best_index:
+            print("  Both simulators agree on the best trajectory")
         else:
-            print("We have a problem")
+            top2_oracle_rewards = np.argsort(oracle_rewards)[-2:]
             
-            # Create a unique directory for this debug instance
-            import os
-            from datetime import datetime
+            if best_index in top2_oracle_rewards:
+                print("  Both simulators agree on the best trajectory")
+            else:
+                # breakpoint()
+                print("We have a problem")
+    
+                # Create a unique directory for this debug instance
+                import os
+                from datetime import datetime
+                
+                # Create a timestamp-based folder name for better organization
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                rnd_num = np.random.randint(0, 100000)
+                debug_folder_name = f"debug_{timestamp}_{rnd_num}"
+                debug_instance_path = os.path.join("/data/user_data/rishisha/sitcom/debug_multirewarder/", debug_folder_name)
             
-            # Create a timestamp-based folder name for better organization
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            rnd_num = np.random.randint(0, 100000)
-            debug_folder_name = f"debug_{timestamp}_{rnd_num}"
-            debug_instance_path = os.path.join("/data/user_data/rishisha/sitcom/debug_grm/", debug_folder_name)
+                # Create the directory if it doesn't exist
+                os.makedirs(debug_instance_path, exist_ok=True)
             
-            # Create the directory if it doesn't exist
-            os.makedirs(debug_instance_path, exist_ok=True)
-            
-            # Save the images in the new folder
-            image1 = Image.fromarray(start_image)
-            image1.save(os.path.join(debug_instance_path, "start_image.png"))
-            
-            final_image_best_oracle = Image.fromarray(np.array(final_images[best_oracle_reward_idx]))
-            final_image_best_oracle.save(os.path.join(debug_instance_path, "final_image_best_oracle.png"))
-            
-            final_image_best_gemini = Image.fromarray(np.array(final_images[best_gemini_reward_idx]))
-            final_image_best_gemini.save(os.path.join(debug_instance_path, "final_image_best_gemini.png"))
-            
-            # Create a comprehensive JSON file with all relevant information
-            import json
-            data = {
-                # Task information
-                "task_description": task_description,
+                # Save the images in the new folder
+                image1 = Image.fromarray(start_image)
+                image1.save(os.path.join(debug_instance_path, "start_image.png"))
                 
-                # Best index information
-                "best_oracle_reward_idx": int(best_oracle_reward_idx),
-                "best_gemini_reward_idx": int(best_gemini_reward_idx),
+                # Save all final images for comparison
+                for i, final_image in enumerate(final_images):
+                    final_img = Image.fromarray(np.array(final_image))
+                    final_img.save(os.path.join(debug_instance_path, f"final_image_{i}.png"))
                 
-                # Best rewards
-                "best_oracle_reward": float(best_oracle_reward),
-                "best_gemini_reward": float(best_gemini_reward),
+                # Save final rewards
+                with open(os.path.join(debug_instance_path, "final_rewards.txt"), "w") as f:
+                    for i, final_reward in enumerate(oracle_rewards):
+                        f.write(f"Trajectory {i+1}: {final_reward}\n")
                 
-                # Cross-rewards (clearly labeled)
-                "gemini_reward_at_best_oracle_idx": float(oracle_idx_gemini_reward),  # Gemini's reward at Oracle's best index
-                "oracle_reward_at_best_gemini_idx": float(gemini_idx_oracle_reward),  # Oracle's reward at Gemini's best index
+                # Create a comprehensive JSON file with all relevant information
+                import json
+                data = {
+                    # Task information
+                    "task_description": task_description,
+                    
+                    # Best index information
+                    "best_oracle_reward_idx": int(best_oracle_reward_idx),
+                    "best_gemini_reward_idx": int(best_index),
+                    
+                    # All rewards - convert numpy arrays to lists
+                    "all_oracle_rewards": [float(r) for r in oracle_rewards],
+                    
+                    # Gemini reason
+                    "gemini_reason": gemini_reason,
                 
-                # All rewards
-                "all_oracle_rewards": [float(r) for r in oracle_rewards],
-                "all_gemini_rewards": [float(r) for r in gemini_rewards],
+                    
+                    # Timestamp for reference
+                    "timestamp": timestamp,
+                    
+                    # Additional information 
+                    "trajectory_length": len(oracle_rewards),
+                    "agreement_status": "disagreement" if best_oracle_reward_idx != best_index else "agreement"
+                }
                 
-                # Example trajectories
-                "example_trajectories": example_trajectories,
+                # breakpoint()
                 
-                # Timestamp for reference
-                "timestamp": timestamp,
+                # Save the JSON file
+                with open(os.path.join(debug_instance_path, "debug_info.json"), "w") as f:
+                    json.dump(data, f, indent=4)
                 
-                # Additional information 
-                "trajectory_length": len(oracle_rewards),
-                "agreement_status": "disagreement" if best_oracle_reward_idx != best_gemini_reward_idx else "agreement"
-            }
-            
-            # Save the JSON file
-            with open(os.path.join(debug_instance_path, "debug_info.json"), "w") as f:
-                json.dump(data, f, indent=4)
-            
-            print(f"Debug information saved to: {debug_instance_path}")
+                print(f"Debug information saved to: {debug_instance_path}")
                 
                 
-        average_trajectory_error = tot_trajectory_error / self.num_candidates
         # breakpoint()
         # Compute NDCG@k
-        ndcg_score = self.ndcg_at_k(oracle_rewards, gemini_rewards)
         # breakpoint()
 
-        # Store the trajectory error for analysis
-        self.ranking_error.append(ndcg_score)        
-        self.point_wise_error.append(average_trajectory_error)
-        print(f"Average trajectory error: {average_trajectory_error}")
-        print(f"[TwoSimulatorPlanner] NDCG@k: {ndcg_score}")
         print(f"Best trajectory has {len(best_trajectory)} actions with final reward: {best_final_reward}")
         # Calculate planning time
         planning_time = time.time() - start_time
